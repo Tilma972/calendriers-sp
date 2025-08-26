@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Ajoutez cette ligne pour créer l'exception
+!.env.example
 
 # vercel
 .vercel
