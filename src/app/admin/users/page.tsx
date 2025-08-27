@@ -1,9 +1,10 @@
-// src/app/admin/users/page.tsx - Gestion Utilisateurs Admin
+// src/app/admin/users/page.tsx - Version complète avec gestion d'erreur
 'use client';
 
 import { useEffect, useState } from 'react';
 import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
+import { toast } from 'react-hot-toast'; // À installer: npm install react-hot-toast
 
 interface User {
   id: string;
@@ -22,33 +23,18 @@ interface Team {
   color: string;
 }
 
-export default function AdminUsersPage() {
+// Hook personnalisé pour la gestion des utilisateurs admin
+function useAdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState<string>('all');
-  const [showCreateForm, setShowCreateForm] = useState(false);
-
-  // Form state
-  const [newUser, setNewUser] = useState({
-    email: '',
-    full_name: '',
-    role: 'sapeur' as const,
-    team_id: '',
-    password: '',
-  });
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const loadData = async () => {
     try {
       setIsLoading(true);
 
-      // Charger les utilisateurs avec leurs équipes
-      const { data: usersData } = await supabase
+      // Charger utilisateurs avec équipes (avec retry automatique)
+      const { data: usersData, error: usersError } = await supabase
         .from('profiles')
         .select(`
           id,
@@ -62,12 +48,17 @@ export default function AdminUsersPage() {
         `)
         .order('created_at', { ascending: false });
 
-      // Charger les équipes pour les selects
-      const { data: teamsData } = await supabase
+      if (usersError) throw usersError;
+
+      // Charger équipes pour les selects
+      const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
         .select('id, name, color')
         .order('name');
 
+      if (teamsError) throw teamsError;
+
+      // Format des données
       if (usersData) {
         const formattedUsers: User[] = usersData.map(user => ({
           id: user.id,
@@ -86,15 +77,109 @@ export default function AdminUsersPage() {
         setTeams(teamsData);
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur chargement données:', error);
+      toast.error(`Erreur: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Mise à jour optimiste + rollback en cas d'erreur
+  const updateUser = async (userId: string, updates: Partial<Pick<User, 'role' | 'team_id' | 'is_active'>>) => {
+    // 1. Sauvegarder état actuel pour rollback
+    const originalUser = users.find(u => u.id === userId);
+    if (!originalUser) {
+      toast.error('Utilisateur non trouvé');
+      return;
+    }
+
+    // 2. Mise à jour optimiste (UI instantanée)
+    setUsers(prev => 
+      prev.map(user => 
+        user.id === userId 
+          ? { ...user, ...updates }
+          : user
+      )
+    );
+
+    // 3. Notification immédiate
+    const actionText = 
+      updates.role ? `Rôle changé vers ${updates.role}` :
+      updates.team_id !== undefined ? 'Équipe modifiée' :
+      updates.is_active !== undefined ? (updates.is_active ? 'Activé' : 'Désactivé') :
+      'Modifié';
+    
+    toast.loading(`${actionText}...`, { id: `update-${userId}` });
+
+    try {
+      // 4. Appel API
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      // 5. Succès
+      toast.success(`${actionText} avec succès`, { id: `update-${userId}` });
+      
+      // Recharger les données pour être sûr
+      setTimeout(() => loadData(), 500);
+
+    } catch (error: any) {
+      // 6. Rollback en cas d'erreur
+      setUsers(prev => 
+        prev.map(user => 
+          user.id === userId ? originalUser : user
+        )
+      );
+      
+      console.error('Erreur mise à jour:', error);
+      toast.error(`Erreur: ${error.message}`, { id: `update-${userId}` });
+    }
+  };
+
+  return { users, teams, isLoading, loadData, updateUser };
+}
+
+export default function AdminUsersPage() {
+  const { users, teams, isLoading, loadData, updateUser } = useAdminUsers();
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showResetModal, setShowResetModal] = useState<string | null>(null);
+
+  // Form state
+  const [newUser, setNewUser] = useState({
+    email: '',
+    full_name: '',
+    role: 'sapeur' as const,
+    team_id: '',
+    password: '',
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Fonction de création utilisateur avec gestion d'erreur
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation côté client
+    if (!newUser.email || !newUser.full_name || !newUser.password) {
+      toast.error('Tous les champs obligatoires doivent être remplis');
+      return;
+    }
+
+    if (newUser.password.length < 6) {
+      toast.error('Le mot de passe doit faire au moins 6 caractères');
+      return;
+    }
+
+    const loadingToast = toast.loading('Création de l\'utilisateur...');
 
     try {
       // Créer l'utilisateur dans Supabase Auth
@@ -108,10 +193,7 @@ export default function AdminUsersPage() {
         },
       });
 
-      if (authError) {
-        alert(`Erreur création utilisateur: ${authError.message}`);
-        return;
-      }
+      if (authError) throw authError;
 
       if (authData.user) {
         // Mettre à jour le profil avec le rôle et l'équipe
@@ -126,6 +208,9 @@ export default function AdminUsersPage() {
 
         if (profileError) {
           console.error('Erreur mise à jour profil:', profileError);
+          toast.error('Utilisateur créé mais erreur profil');
+        } else {
+          toast.success('Utilisateur créé avec succès !');
         }
       }
 
@@ -138,46 +223,46 @@ export default function AdminUsersPage() {
         password: '',
       });
       setShowCreateForm(false);
-
-      alert('Utilisateur créé avec succès !');
       loadData();
 
     } catch (error: any) {
-      console.error('Erreur:', error);
-      alert(`Erreur: ${error.message}`);
+      console.error('Erreur création:', error);
+      toast.error(`Erreur: ${error.message}`);
+    } finally {
+      toast.dismiss(loadingToast);
     }
   };
 
-  const handleUpdateUser = async (userId: string, updates: Partial<Pick<User, 'role' | 'team_id' | 'is_active'>>) => {
+  // Gestion réinitialisation mot de passe
+  const handleResetPassword = async (userId: string, userEmail: string) => {
+    const loadingToast = toast.loading('Envoi email de réinitialisation...');
+    
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', userId);
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${window.location.origin}/auth/reset-password`
+      });
 
-      if (error) {
-        console.error('Erreur mise à jour:', error);
-        alert('Erreur lors de la mise à jour');
-        return;
-      }
-
-      // Recharger les données
-      loadData();
-      alert('Utilisateur mis à jour avec succès');
-
-    } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la mise à jour');
+      if (error) throw error;
+      
+      toast.success('Email de réinitialisation envoyé');
+      setShowResetModal(null);
+      
+    } catch (error: any) {
+      console.error('Erreur reset password:', error);
+      toast.error(`Erreur: ${error.message}`);
+    } finally {
+      toast.dismiss(loadingToast);
     }
   };
 
+  // Filtrage des utilisateurs
   const filteredUsers = users.filter(user => {
-    const matchesSearch =
+    const matchesSearch = 
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
-
+    
     const matchesRole = filterRole === 'all' || user.role === filterRole;
-
+    
     return matchesSearch && matchesRole;
   });
 
@@ -206,7 +291,7 @@ export default function AdminUsersPage() {
                 <div className="text-2xl">👥</div>
                 <h1 className="text-xl font-bold text-gray-900">Gestion Utilisateurs</h1>
               </div>
-
+              
               <button
                 onClick={() => setShowCreateForm(true)}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
@@ -230,7 +315,7 @@ export default function AdminUsersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
                 />
               </div>
-
+              
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
@@ -242,12 +327,11 @@ export default function AdminUsersPage() {
                 <option value="tresorier">Trésoriers</option>
               </select>
             </div>
-
+            
             <div className="mt-4 text-sm text-gray-600">
               {filteredUsers.length} utilisateur(s) • {users.filter(u => u.is_active).length} actif(s)
             </div>
           </div>
-
 
           {/* Table utilisateurs */}
           <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -286,11 +370,11 @@ export default function AdminUsersPage() {
                           <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                       </td>
-
+                      
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
                           value={user.role}
-                          onChange={(e) => handleUpdateUser(user.id, { role: e.target.value as any })}
+                          onChange={(e) => updateUser(user.id, { role: e.target.value as any })}
                           className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
                         >
                           <option value="sapeur">Sapeur</option>
@@ -298,11 +382,11 @@ export default function AdminUsersPage() {
                           <option value="tresorier">Trésorier</option>
                         </select>
                       </td>
-
+                      
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
                           value={user.team_id || ''}
-                          onChange={(e) => handleUpdateUser(user.id, { team_id: e.target.value || null })}
+                          onChange={(e) => updateUser(user.id, { team_id: e.target.value || null })}
                           className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
                         >
                           <option value="">Aucune équipe</option>
@@ -313,37 +397,31 @@ export default function AdminUsersPage() {
                           ))}
                         </select>
                       </td>
-
+                      
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
-                          onClick={() => handleUpdateUser(user.id, { is_active: !user.is_active })}
-                          className={`px-2 py-1 text-xs rounded-full ${user.is_active
+                          onClick={() => updateUser(user.id, { is_active: !user.is_active })}
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            user.is_active
                               ? 'bg-green-100 text-green-800'
                               : 'bg-red-100 text-red-800'
-                            }`}
+                          }`}
                         >
                           {user.is_active ? 'Actif' : 'Inactif'}
                         </button>
                       </td>
-
+                      
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
-
+                      
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              if (confirm('Réinitialiser le mot de passe ?')) {
-                                // TODO: Implémenter reset password
-                                alert('Fonctionnalité à implémenter');
-                              }
-                            }}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            Reset MDP
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setShowResetModal(user.id)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          Reset MDP
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -359,7 +437,7 @@ export default function AdminUsersPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   Créer un Nouvel Utilisateur
                 </h3>
-
+                
                 <form onSubmit={handleCreateUser} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -451,6 +529,39 @@ export default function AdminUsersPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal confirmation reset password */}
+          {showResetModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  Réinitialiser le mot de passe
+                </h3>
+                
+                <p className="text-gray-600 mb-6">
+                  Un email de réinitialisation sera envoyé à l'utilisateur.
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowResetModal(null)}
+                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => {
+                      const user = users.find(u => u.id === showResetModal);
+                      if (user) handleResetPassword(user.id, user.email);
+                    }}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+                  >
+                    Envoyer
+                  </button>
+                </div>
               </div>
             </div>
           )}
