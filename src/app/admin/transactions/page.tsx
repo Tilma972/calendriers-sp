@@ -155,7 +155,7 @@ function useAdminTransactions() {
     }
   };
 
-  // Validation en lot
+  // Validation en lot optimisée
   const validateBulk = async (transactionIds: string[], action: 'validate' | 'reject', note?: string) => {
     if (transactionIds.length === 0) return;
 
@@ -169,7 +169,8 @@ function useAdminTransactions() {
           ? { 
               ...t, 
               status: newStatus as any,
-              validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null
+              validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
+              notes: note ? `${t.notes || ''}${t.notes ? '\n' : ''}Admin: ${note}` : t.notes
             }
           : t
       )
@@ -179,20 +180,30 @@ function useAdminTransactions() {
     toast.loading(`${actionText} de ${transactionIds.length} transactions...`, { id: 'validate-bulk' });
 
     try {
-      const { error } = await supabase
-        .from('transactions')
-        .update({
-          status: newStatus,
-          validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
-          notes: note
-            ? originalTransactions.find(t => t.id === transactionIds[0])?.notes
-              ? `${originalTransactions.find(t => t.id === transactionIds[0])?.notes}\nAdmin: ${note}`
-              : `Admin: ${note}`
-            : originalTransactions.find(t => t.id === transactionIds[0])?.notes
-        })
-        .in('id', transactionIds);
+      // Approche plus sûre : mise à jour une par une pour éviter les problèmes SQL
+      const updatePromises = transactionIds.map(transactionId => {
+        const originalTransaction = originalTransactions.find(t => t.id === transactionId);
+        const updatedNotes = note ? 
+          `${originalTransaction?.notes || ''}${originalTransaction?.notes ? '\n' : ''}Admin: ${note}` : 
+          originalTransaction?.notes;
 
-      if (error) throw error;
+        return supabase
+          .from('transactions')
+          .update({
+            status: newStatus,
+            validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
+            notes: updatedNotes
+          })
+          .eq('id', transactionId);
+      });
+
+      const results = await Promise.all(updatePromises);
+      
+      // Vérifier les erreurs
+      const errors = results.filter(result => result.error);
+      if (errors.length > 0) {
+        throw new Error(`${errors.length} transaction(s) ont échoué`);
+      }
 
       toast.success(`${transactionIds.length} transactions ${action === 'validate' ? 'validées' : 'rejetées'}`, { id: 'validate-bulk' });
       setSelectedTransactions([]);
@@ -235,6 +246,8 @@ export default function AdminTransactionsPage() {
   
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [teamFilter, setTeamFilter] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showBulkModal, setShowBulkModal] = useState<{ action: 'validate' | 'reject' } | null>(null);
   const [bulkNote, setBulkNote] = useState('');
@@ -244,16 +257,35 @@ export default function AdminTransactionsPage() {
     loadData();
   }, []);
 
-  // Filtrage des transactions
+  // Filtrage des transactions avec tous les critères
   const filteredTransactions = transactions.filter(transaction => {
     const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
     const matchesTeam = teamFilter === 'all' || transaction.team_id === teamFilter;
+    const matchesUser = userFilter === 'all' || transaction.user_id === userFilter;
+    
+    // Filtre par période
+    const transactionDate = new Date(transaction.created_at);
+    const now = new Date();
+    let matchesDate = true;
+    
+    if (dateFilter === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      matchesDate = transactionDate >= today;
+    } else if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      matchesDate = transactionDate >= weekAgo;
+    } else if (dateFilter === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      matchesDate = transactionDate >= monthAgo;
+    }
+    
     const matchesSearch = 
       transaction.user_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transaction.donator_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transaction.receipt_number?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesStatus && matchesTeam && matchesSearch;
+    return matchesStatus && matchesTeam && matchesUser && matchesDate && matchesSearch;
   });
 
   // Stats pour le header
@@ -266,11 +298,18 @@ export default function AdminTransactionsPage() {
       .reduce((sum, t) => sum + t.amount, 0),
   };
 
-  // Équipes uniques pour le filtre
+  // Équipes et utilisateurs uniques pour les filtres
   const teams = Array.from(new Set(
     transactions
       .filter(t => t.team_name && t.team_id)
       .map(t => ({ id: t.team_id!, name: t.team_name!, color: t.team_color! }))
+      .map(t => JSON.stringify(t))
+  )).map(t => JSON.parse(t));
+
+  const users = Array.from(new Set(
+    transactions
+      .filter(t => t.user_name && t.user_id)
+      .map(t => ({ id: t.user_id, name: t.user_name! }))
       .map(t => JSON.stringify(t))
   )).map(t => JSON.parse(t));
 
@@ -371,9 +410,9 @@ export default function AdminTransactionsPage() {
             </div>
           </div>
 
-          {/* Filtres */}
+          {/* Filtres étendus */}
           <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <div className="grid md:grid-cols-4 gap-4">
+            <div className="grid md:grid-cols-5 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
                 <select
@@ -405,11 +444,41 @@ export default function AdminTransactionsPage() {
                 </select>
               </div>
               
-              <div className="md:col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Sapeur</label>
+                <select
+                  value={userFilter}
+                  onChange={(e) => setUserFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                >
+                  <option value="all">Tous les sapeurs</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Période</label>
+                <select
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                >
+                  <option value="all">Toutes les dates</option>
+                  <option value="today">Aujourd'hui</option>
+                  <option value="week">7 derniers jours</option>
+                  <option value="month">30 derniers jours</option>
+                </select>
+              </div>
+              
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Recherche</label>
                 <input
                   type="text"
-                  placeholder="Nom sapeur, donateur ou n° reçu..."
+                  placeholder="Nom, donateur, n° reçu..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
@@ -417,8 +486,24 @@ export default function AdminTransactionsPage() {
               </div>
             </div>
             
-            <div className="mt-4 text-sm text-gray-600">
-              {filteredTransactions.length} transaction(s) • {selectedTransactions.length} sélectionnée(s)
+            {/* Boutons de remise à zéro et stats */}
+            <div className="flex justify-between items-center pt-4 border-t">
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setTeamFilter('all');
+                  setUserFilter('all');
+                  setDateFilter('all');
+                  setSearchTerm('');
+                }}
+                className="text-sm text-gray-600 hover:text-gray-800"
+              >
+                Réinitialiser les filtres
+              </button>
+              
+              <div className="text-sm text-gray-600">
+                {filteredTransactions.length} transaction(s) affichée(s) sur {transactions.length} • {selectedTransactions.length} sélectionnée(s)
+              </div>
             </div>
           </div>
 
