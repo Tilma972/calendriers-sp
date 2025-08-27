@@ -6,6 +6,7 @@ import { Inter } from 'next/font/google';
 import { useAuthStore } from '@/shared/stores/auth';
 import { AuthForm, useAuthMode } from '@/shared/components/auth/AuthForm';
 import { OfflineIndicator } from '@/shared/components/OfflineIndicator';
+import { Toaster } from 'react-hot-toast';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -81,6 +82,7 @@ export default function RootLayout({
         {children}
         {/* Indicateur offline global */}
         <OfflineIndicator />
+        <Toaster position="top-right" />
       </body>
     </html>
   );
