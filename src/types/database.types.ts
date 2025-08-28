@@ -16,7 +16,7 @@ export type Database = {
           email: string;
           full_name: string | null;
           id: string;
-          is_active: boolean | null;
+          is_active: boolean; // DEFAULT true, pas nullable
           phone: string | null;
           role: Database["public"]["Enums"]["role_enum"];
           team_id: string | null;
@@ -28,9 +28,9 @@ export type Database = {
           email: string;
           full_name?: string | null;
           id: string;
-          is_active?: boolean | null;
+          is_active?: boolean; // Optionnel avec DEFAULT
           phone?: string | null;
-          role?: Database["public"]["Enums"]["role_enum"];
+          role?: Database["public"]["Enums"]["role_enum"]; // DEFAULT 'sapeur'
           team_id?: string | null;
           updated_at?: string; // timestamptz
         };
@@ -40,7 +40,7 @@ export type Database = {
           email?: string;
           full_name?: string | null;
           id?: string;
-          is_active?: boolean | null;
+          is_active?: boolean;
           phone?: string | null;
           role?: Database["public"]["Enums"]["role_enum"];
           team_id?: string | null;
@@ -71,16 +71,16 @@ export type Database = {
           max_calendars_per_transaction: number;
           sync_frequency_minutes: number;
           notification_emails: string[] | null;
-          primary_color: string | null;
+          primary_color: string; // DEFAULT '#DC2626', pas nullable
         };
         Insert: {
-          id?: number;
-          global_calendars_target?: number;
-          default_team_target?: number;
-          max_calendars_per_transaction?: number;
-          sync_frequency_minutes?: number;
+          id?: number; // DEFAULT 1
+          global_calendars_target?: number; // DEFAULT 5000
+          default_team_target?: number; // DEFAULT 250
+          max_calendars_per_transaction?: number; // DEFAULT 10
+          sync_frequency_minutes?: number; // DEFAULT 15
           notification_emails?: string[] | null;
-          primary_color?: string | null;
+          primary_color?: string; // DEFAULT '#DC2626'
         };
         Update: {
           id?: number;
@@ -89,33 +89,33 @@ export type Database = {
           max_calendars_per_transaction?: number;
           sync_frequency_minutes?: number;
           notification_emails?: string[] | null;
-          primary_color?: string | null;
+          primary_color?: string;
         };
         Relationships: [];
       };
       teams: {
         Row: {
-          calendars_target: number | null;
+          calendars_target: number; // DEFAULT 0, pas nullable
           chef_id: string | null;
-          color: string | null;
+          color: string; // DEFAULT '#DC2626', pas nullable
           created_at: string; // timestamptz
           id: string;
           name: string;
           updated_at: string; // timestamptz
         };
         Insert: {
-          calendars_target?: number | null;
+          calendars_target?: number; // DEFAULT 0
           chef_id?: string | null;
-          color?: string | null;
+          color?: string; // DEFAULT '#DC2626'
           created_at?: string; // timestamptz
-          id?: string;
+          id?: string; // gen_random_uuid()
           name: string;
           updated_at?: string; // timestamptz
         };
         Update: {
-          calendars_target?: number | null;
+          calendars_target?: number;
           chef_id?: string | null;
-          color?: string | null;
+          color?: string;
           created_at?: string; // timestamptz
           id?: string;
           name?: string;
@@ -133,7 +133,7 @@ export type Database = {
       };
       tournees: {
         Row: {
-          calendars_distributed: number | null;
+          calendars_distributed: number; // DEFAULT 0, pas nullable
           calendars_initial: number;
           calendars_remaining: number | null;
           created_at: string; // timestamptz
@@ -141,33 +141,33 @@ export type Database = {
           id: string;
           notes: string | null;
           started_at: string; // timestamptz
-          status: Database["public"]["Enums"]["tournee_status_enum"] | null;
+          status: Database["public"]["Enums"]["tournee_status_enum"]; // DEFAULT 'en_cours', pas nullable
           team_id: string | null;
-          total_amount: number | null;
-          total_transactions: number | null;
+          total_amount: string; // numeric -> string, DEFAULT 0
+          total_transactions: number; // DEFAULT 0, pas nullable
           user_id: string;
           validated_at: string | null; // timestamptz
           validated_by: string | null;
         };
         Insert: {
-          calendars_distributed?: number | null;
+          calendars_distributed?: number; // DEFAULT 0
           calendars_initial: number;
           calendars_remaining?: number | null;
           created_at?: string; // timestamptz
           ended_at?: string | null; // timestamptz
-          id?: string;
+          id?: string; // gen_random_uuid()
           notes?: string | null;
-          started_at?: string; // timestamptz
-          status?: Database["public"]["Enums"]["tournee_status_enum"] | null;
+          started_at?: string; // timestamptz, DEFAULT now()
+          status?: Database["public"]["Enums"]["tournee_status_enum"]; // DEFAULT 'en_cours'
           team_id?: string | null;
-          total_amount?: number | null;
-          total_transactions?: number | null;
+          total_amount?: string; // DEFAULT 0
+          total_transactions?: number; // DEFAULT 0
           user_id: string;
           validated_at?: string | null; // timestamptz
           validated_by?: string | null;
         };
         Update: {
-          calendars_distributed?: number | null;
+          calendars_distributed?: number;
           calendars_initial?: number;
           calendars_remaining?: number | null;
           created_at?: string; // timestamptz
@@ -175,10 +175,10 @@ export type Database = {
           id?: string;
           notes?: string | null;
           started_at?: string; // timestamptz
-          status?: Database["public"]["Enums"]["tournee_status_enum"] | null;
+          status?: Database["public"]["Enums"]["tournee_status_enum"];
           team_id?: string | null;
-          total_amount?: number | null;
-          total_transactions?: number | null;
+          total_amount?: string;
+          total_transactions?: number;
           user_id?: string;
           validated_at?: string | null; // timestamptz
           validated_by?: string | null;
@@ -209,8 +209,8 @@ export type Database = {
       };
       transactions: {
         Row: {
-          amount: number;
-          calendars_given: number | null;
+          amount: string; // numeric -> string, NOT NULL
+          calendars_given: number; // DEFAULT 0, pas nullable
           cheque_banque: string | null;
           cheque_date_emission: string | null; // timestamptz
           cheque_deposited_at: string | null; // timestamptz
@@ -228,7 +228,7 @@ export type Database = {
           qr_verification_code: string | null;
           receipt_number: string | null;
           receipt_url: string | null;
-          status: Database["public"]["Enums"]["transaction_status_enum"] | null;
+          status: Database["public"]["Enums"]["transaction_status_enum"]; // DEFAULT 'pending', pas nullable
           stripe_session_id: string | null;
           team_id: string | null;
           tournee_id: string | null;
@@ -237,8 +237,8 @@ export type Database = {
           validated_tresorier_at: string | null; // timestamptz
         };
         Insert: {
-          amount: number;
-          calendars_given?: number | null;
+          amount: string; // Requis
+          calendars_given?: number; // DEFAULT 0
           cheque_banque?: string | null;
           cheque_date_emission?: string | null; // timestamptz
           cheque_deposited_at?: string | null; // timestamptz
@@ -248,7 +248,7 @@ export type Database = {
           donator_address?: string | null;
           donator_email?: string | null;
           donator_name?: string | null;
-          id?: string;
+          id?: string; // gen_random_uuid()
           idempotency_key?: string | null;
           notes?: string | null;
           payment_method: Database["public"]["Enums"]["payment_method_enum"];
@@ -256,7 +256,7 @@ export type Database = {
           qr_verification_code?: string | null;
           receipt_number?: string | null;
           receipt_url?: string | null;
-          status?: Database["public"]["Enums"]["transaction_status_enum"] | null;
+          status?: Database["public"]["Enums"]["transaction_status_enum"]; // DEFAULT 'pending'
           stripe_session_id?: string | null;
           team_id?: string | null;
           tournee_id?: string | null;
@@ -265,8 +265,8 @@ export type Database = {
           validated_tresorier_at?: string | null; // timestamptz
         };
         Update: {
-          amount?: number;
-          calendars_given?: number | null;
+          amount?: string;
+          calendars_given?: number;
           cheque_banque?: string | null;
           cheque_date_emission?: string | null; // timestamptz
           cheque_deposited_at?: string | null; // timestamptz
@@ -284,7 +284,7 @@ export type Database = {
           qr_verification_code?: string | null;
           receipt_number?: string | null;
           receipt_url?: string | null;
-          status?: Database["public"]["Enums"]["transaction_status_enum"] | null;
+          status?: Database["public"]["Enums"]["transaction_status_enum"];
           stripe_session_id?: string | null;
           team_id?: string | null;
           tournee_id?: string | null;
@@ -408,4 +408,3 @@ export type Enums<
   : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
     ? PublicSchema["Enums"][PublicEnumNameOrOptions]
     : never;
-

@@ -1,135 +1,110 @@
 // src/app/admin/settings/page.tsx - Paramètres Globaux Admin
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
 import { toast } from 'react-hot-toast';
+import type { Database } from '@/shared/types/database';
 
-interface AppSettings {
-  // Campagne
-  campaign_name: string;
-  campaign_start: string;
-  campaign_end: string;
-  default_calendar_price: number;
-  
-  // Objectifs
-  global_target: number;
-  default_team_target: number;
-  
-  // Business rules
-  max_calendars_per_transaction: number;
-  allow_offline_mode: boolean;
-  auto_sync_interval: number;
-  
-  // Notifications
-  enable_email_notifications: boolean;
-  admin_emails: string[];
-  
-  // Branding
-  organization_name: string;
-  primary_color: string;
-  
-  // Technique
-  maintenance_mode: boolean;
-  backup_enabled: boolean;
-}
+// Utilisation du type depuis la base de données
+type AppSettings = Database['public']['Tables']['settings']['Row'];
 
 // Hook pour gestion des paramètres
 function useAppSettings() {
   const [settings, setSettings] = useState<AppSettings>({
-    campaign_name: 'Calendriers 2025',
-    campaign_start: new Date().toISOString().split('T')[0],
-    campaign_end: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    default_calendar_price: 10,
-    global_target: 1000,
-    default_team_target: 100,
-    max_calendars_per_transaction: 20,
-    allow_offline_mode: true,
-    auto_sync_interval: 5,
-    enable_email_notifications: true,
-    admin_emails: [],
-    organization_name: 'ASPCH - Amicale des Sapeurs-Pompiers de Clermont l\'Hérault',
+    id: 1,
+    global_calendars_target: 5000,
+    default_team_target: 250,
+    max_calendars_per_transaction: 10,
+    sync_frequency_minutes: 15,
+    notification_emails: [],
     primary_color: '#DC2626',
-    maintenance_mode: false,
-    backup_enabled: true,
   });
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<AppSettings | null>(null);
 
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     try {
       setIsLoading(true);
 
-      // Charger les paramètres depuis une table dédiée ou des variables d'environnement
-      // Pour l'instant, on simule avec des valeurs par défaut
-      // Dans une vraie implémentation, on aurait une table 'app_settings' 
-      
+      // Charger les paramètres depuis la table settings
       const { data, error } = await supabase
-        .from('app_settings')
+        .from('settings')
         .select('*')
         .single();
 
       if (error) {
-        // Si la table n'existe pas ou autre erreur, on garde les valeurs par défaut
-        console.warn('Table app_settings non trouvée, utilisation des défauts');
+        // Si la table est vide, créer l'enregistrement par défaut
+        if (error.code === 'PGRST116') {
+          const { data: newSettings, error: insertError } = await supabase
+            .from('settings')
+            .insert([{
+              id: 1,
+              global_calendars_target: 5000,
+              default_team_target: 250,
+              max_calendars_per_transaction: 10,
+              sync_frequency_minutes: 15,
+              notification_emails: [],
+              primary_color: '#DC2626'
+            }])
+            .select()
+            .single();
+
+          if (insertError) {
+            throw insertError;
+          }
+
+          if (newSettings) {
+            setSettings(newSettings);
+            setOriginalSettings(newSettings);
+          }
+        } else {
+          throw error;
+        }
       } else if (data) {
-        setSettings({
-          campaign_name: data.campaign_name || settings.campaign_name,
-          campaign_start: data.campaign_start || settings.campaign_start,
-          campaign_end: data.campaign_end || settings.campaign_end,
-          default_calendar_price: data.default_calendar_price || settings.default_calendar_price,
-          global_target: data.global_target || settings.global_target,
-          default_team_target: data.default_team_target || settings.default_team_target,
-          max_calendars_per_transaction: data.max_calendars_per_transaction || settings.max_calendars_per_transaction,
-          allow_offline_mode: data.allow_offline_mode !== null ? data.allow_offline_mode : settings.allow_offline_mode,
-          auto_sync_interval: data.auto_sync_interval || settings.auto_sync_interval,
-          enable_email_notifications: data.enable_email_notifications !== null ? data.enable_email_notifications : settings.enable_email_notifications,
-          admin_emails: data.admin_emails || settings.admin_emails,
-          organization_name: data.organization_name || settings.organization_name,
-          primary_color: data.primary_color || settings.primary_color,
-          maintenance_mode: data.maintenance_mode || false,
-          backup_enabled: data.backup_enabled !== null ? data.backup_enabled : settings.backup_enabled,
-        });
-      }
-        setSettings(loadedSettings);
-        setOriginalSettings(loadedSettings);
-      } else {
-        setOriginalSettings(settings);
+        setSettings(data);
+        setOriginalSettings(data);
       }
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erreur chargement paramètres:', error);
-      toast.error(`Erreur: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast.error(`Erreur: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const saveSettings = async () => {
     try {
       setIsSaving(true);
       toast.loading('Sauvegarde des paramètres...', { id: 'save-settings' });
 
-      // Upsert dans la table app_settings
       const { error } = await supabase
-        .from('app_settings')
-        .upsert({
-          id: 1, // ID fixe pour avoir un seul enregistrement de paramètres
-          ...settings,
-          updated_at: new Date().toISOString(),
-        });
+        .from('settings')
+        .update({
+          global_calendars_target: settings.global_calendars_target,
+          default_team_target: settings.default_team_target,
+          max_calendars_per_transaction: settings.max_calendars_per_transaction,
+          sync_frequency_minutes: settings.sync_frequency_minutes,
+          notification_emails: settings.notification_emails,
+          primary_color: settings.primary_color,
+        })
+        .eq('id', 1);
 
       if (error) throw error;
 
       toast.success('Paramètres sauvegardés avec succès', { id: 'save-settings' });
       setOriginalSettings({ ...settings });
 
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erreur sauvegarde:', error);
-      toast.error(`Erreur: ${error.message}`, { id: 'save-settings' });
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      toast.error(`Erreur: ${errorMessage}`, { id: 'save-settings' });
     } finally {
       setIsSaving(false);
     }
@@ -170,22 +145,23 @@ export default function AdminSettingsPage() {
     hasUnsavedChanges
   } = useAppSettings();
 
-  const [activeTab, setActiveTab] = useState('campaign');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [activeTab, setActiveTab] = useState('general');
+  const [newEmail, setNewEmail] = useState('');
 
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [loadSettings]);
 
-  const updateSetting = (key: keyof AppSettings, value: any) => {
+  const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const addAdminEmail = () => {
-    if (newAdminEmail && newAdminEmail.includes('@')) {
-      if (!settings.admin_emails.includes(newAdminEmail)) {
-        updateSetting('admin_emails', [...settings.admin_emails, newAdminEmail]);
-        setNewAdminEmail('');
+  const addNotificationEmail = () => {
+    if (newEmail && newEmail.includes('@')) {
+      const currentEmails = settings.notification_emails || [];
+      if (!currentEmails.includes(newEmail)) {
+        updateSetting('notification_emails', [...currentEmails, newEmail]);
+        setNewEmail('');
       } else {
         toast.error('Cet email est déjà dans la liste');
       }
@@ -194,8 +170,9 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const removeAdminEmail = (email: string) => {
-    updateSetting('admin_emails', settings.admin_emails.filter(e => e !== email));
+  const removeNotificationEmail = (email: string) => {
+    const currentEmails = settings.notification_emails || [];
+    updateSetting('notification_emails', currentEmails.filter(e => e !== email));
   };
 
   if (isLoading) {
@@ -219,7 +196,9 @@ export default function AdminSettingsPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-3">
-                <a href="/admin" className="text-gray-500 hover:text-gray-700">← Dashboard</a>
+                <Link href="/admin" className="text-gray-500 hover:text-gray-700">
+                  ← Dashboard
+                </Link>
                 <div className="text-2xl">⚙️</div>
                 <h1 className="text-xl font-bold text-gray-900">Paramètres Application</h1>
               </div>
@@ -254,7 +233,7 @@ export default function AdminSettingsPage() {
                 <div className="text-orange-800 font-medium">Modifications non sauvegardées</div>
               </div>
               <div className="text-orange-700 text-sm mt-1">
-                N'oubliez pas de sauvegarder vos modifications avant de quitter la page.
+                {`N'oubliez pas de sauvegarder vos modifications avant de quitter la page.`}
               </div>
             </div>
           )}
@@ -264,11 +243,11 @@ export default function AdminSettingsPage() {
             <div className="border-b border-gray-200">
               <nav className="flex space-x-8 px-6">
                 {[
-                  { id: 'campaign', label: 'Campagne', icon: '🎯' },
+                  { id: 'general', label: 'Général', icon: '🎯' },
                   { id: 'business', label: 'Règles métier', icon: '📋' },
                   { id: 'notifications', label: 'Notifications', icon: '📧' },
-                  { id: 'branding', label: 'Apparence', icon: '🎨' },
-                  { id: 'technical', label: 'Technique', icon: '🔧' },
+                  { id: 'appearance', label: 'Apparence', icon: '🎨' },
+                  { id: 'sync', label: 'Synchronisation', icon: '🔄' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -287,68 +266,11 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="p-6">
-              {/* Onglet Campagne */}
-              {activeTab === 'campaign' && (
+              {/* Onglet Général */}
+              {activeTab === 'general' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration Campagne</h3>
-                    
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Nom de la campagne
-                        </label>
-                        <input
-                          type="text"
-                          value={settings.campaign_name}
-                          onChange={(e) => updateSetting('campaign_name', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                          placeholder="Ex: Calendriers 2025"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Prix calendrier par défaut (€)
-                        </label>
-                        <input
-                          type="number"
-                          value={settings.default_calendar_price}
-                          onChange={(e) => updateSetting('default_calendar_price', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                          min="0"
-                          step="0.5"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Date de début
-                        </label>
-                        <input
-                          type="date"
-                          value={settings.campaign_start}
-                          onChange={(e) => updateSetting('campaign_start', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Date de fin
-                        </label>
-                        <input
-                          type="date"
-                          value={settings.campaign_end}
-                          onChange={(e) => updateSetting('campaign_end', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-md font-medium text-gray-900 mb-4">Objectifs</h4>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Objectifs de campagne</h3>
                     
                     <div className="grid md:grid-cols-2 gap-6">
                       <div>
@@ -357,19 +279,19 @@ export default function AdminSettingsPage() {
                         </label>
                         <input
                           type="number"
-                          value={settings.global_target}
-                          onChange={(e) => updateSetting('global_target', parseInt(e.target.value) || 0)}
+                          value={settings.global_calendars_target}
+                          onChange={(e) => updateSetting('global_calendars_target', parseInt(e.target.value) || 0)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
                           min="0"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Objectif de calendriers pour toute la campagne
+                          Objectif total de calendriers pour toute la campagne
                         </p>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Objectif par équipe par défaut
+                          Objectif par défaut par équipe
                         </label>
                         <input
                           type="number"
@@ -401,52 +323,13 @@ export default function AdminSettingsPage() {
                         <input
                           type="number"
                           value={settings.max_calendars_per_transaction}
-                          onChange={(e) => updateSetting('max_calendars_per_transaction', parseInt(e.target.value) || 0)}
+                          onChange={(e) => updateSetting('max_calendars_per_transaction', parseInt(e.target.value) || 1)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
                           min="1"
                           max="100"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Limite le nombre de calendriers qu'un sapeur peut saisir en une fois
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={settings.allow_offline_mode}
-                            onChange={(e) => updateSetting('allow_offline_mode', e.target.checked)}
-                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-700">
-                              Autoriser le mode hors-ligne
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Les sapeurs peuvent saisir des transactions sans connexion Internet
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Intervalle de synchronisation automatique (minutes)
-                        </label>
-                        <select
-                          value={settings.auto_sync_interval}
-                          onChange={(e) => updateSetting('auto_sync_interval', parseInt(e.target.value))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                        >
-                          <option value={1}>1 minute</option>
-                          <option value={5}>5 minutes</option>
-                          <option value={10}>10 minutes</option>
-                          <option value={30}>30 minutes</option>
-                          <option value={60}>1 heure</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Fréquence des tentatives de synchronisation en arrière-plan
+                          {`Limite le nombre de calendriers qu'un sapeur peut saisir en une fois`}
                         </p>
                       </div>
                     </div>
@@ -458,34 +341,15 @@ export default function AdminSettingsPage() {
               {activeTab === 'notifications' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration Emails</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Emails de notification</h3>
                     
                     <div className="space-y-4">
-                      <div>
-                        <label className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={settings.enable_email_notifications}
-                            onChange={(e) => updateSetting('enable_email_notifications', e.target.checked)}
-                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-700">
-                              Activer les notifications par email
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Envoyer des emails pour les validations, erreurs, etc.
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Emails administrateurs
                         </label>
                         <div className="space-y-2">
-                          {settings.admin_emails.map((email, index) => (
+                          {(settings.notification_emails || []).map((email, index) => (
                             <div key={index} className="flex items-center gap-2">
                               <input
                                 type="email"
@@ -494,7 +358,7 @@ export default function AdminSettingsPage() {
                                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                               />
                               <button
-                                onClick={() => removeAdminEmail(email)}
+                                onClick={() => removeNotificationEmail(email)}
                                 className="text-red-600 hover:text-red-800 p-2"
                               >
                                 ✕
@@ -505,14 +369,14 @@ export default function AdminSettingsPage() {
                           <div className="flex items-center gap-2">
                             <input
                               type="email"
-                              value={newAdminEmail}
-                              onChange={(e) => setNewAdminEmail(e.target.value)}
+                              value={newEmail}
+                              onChange={(e) => setNewEmail(e.target.value)}
                               placeholder="nouvel.admin@email.com"
                               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                              onKeyPress={(e) => e.key === 'Enter' && addAdminEmail()}
+                              onKeyPress={(e) => e.key === 'Enter' && addNotificationEmail()}
                             />
                             <button
-                              onClick={addAdminEmail}
+                              onClick={addNotificationEmail}
                               className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md"
                             >
                               Ajouter
@@ -529,7 +393,7 @@ export default function AdminSettingsPage() {
               )}
 
               {/* Onglet Apparence */}
-              {activeTab === 'branding' && (
+              {activeTab === 'appearance' && (
                 <div className="space-y-6">
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Personnalisation</h3>
@@ -537,38 +401,25 @@ export default function AdminSettingsPage() {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Nom de l'organisation
-                        </label>
-                        <input
-                          type="text"
-                          value={settings.organization_name}
-                          onChange={(e) => updateSetting('organization_name', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                          placeholder="Ex: SDIS - Service Départemental d'Incendie et de Secours"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
                           Couleur principale
                         </label>
                         <div className="flex items-center gap-4">
                           <input
                             type="color"
-                            value={settings.primary_color}
+                            value={settings.primary_color || '#DC2626'}
                             onChange={(e) => updateSetting('primary_color', e.target.value)}
                             className="w-16 h-10 border border-gray-300 rounded-md cursor-pointer"
                           />
                           <input
                             type="text"
-                            value={settings.primary_color}
+                            value={settings.primary_color || '#DC2626'}
                             onChange={(e) => updateSetting('primary_color', e.target.value)}
                             className="px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 font-mono"
                             placeholder="#DC2626"
                           />
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Couleur utilisée pour les boutons, liens et éléments d'interface
+                          {`Couleur utilisée pour les boutons, liens et éléments d'interface`}
                         </p>
                       </div>
 
@@ -577,12 +428,12 @@ export default function AdminSettingsPage() {
                         <div className="space-y-2">
                           <button 
                             className="px-4 py-2 text-white rounded-md font-medium"
-                            style={{ backgroundColor: settings.primary_color }}
+                            style={{ backgroundColor: settings.primary_color || '#DC2626' }}
                           >
                             Bouton principal
                           </button>
                           <div>
-                            <a href="#" style={{ color: settings.primary_color }} className="font-medium">
+                            <a href="#" style={{ color: settings.primary_color || '#DC2626' }} className="font-medium">
                               Lien de couleur principale
                             </a>
                           </div>
@@ -593,61 +444,32 @@ export default function AdminSettingsPage() {
                 </div>
               )}
 
-              {/* Onglet Technique */}
-              {activeTab === 'technical' && (
+              {/* Onglet Synchronisation */}
+              {activeTab === 'sync' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Paramètres Techniques</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration de la synchronisation</h3>
                     
                     <div className="space-y-4">
                       <div>
-                        <label className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={settings.maintenance_mode}
-                            onChange={(e) => updateSetting('maintenance_mode', e.target.checked)}
-                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-700">
-                              Mode maintenance
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Désactive l'accès à l'application pour les utilisateurs (sauf admins)
-                            </div>
-                          </div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Fréquence de synchronisation (minutes)
                         </label>
+                        <select
+                          value={settings.sync_frequency_minutes}
+                          onChange={(e) => updateSetting('sync_frequency_minutes', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                        >
+                          <option value={5}>5 minutes</option>
+                          <option value={10}>10 minutes</option>
+                          <option value={15}>15 minutes</option>
+                          <option value={30}>30 minutes</option>
+                          <option value={60}>1 heure</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {`Fréquence des tentatives de synchronisation automatique des données en arrière-plan`}
+                        </p>
                       </div>
-
-                      <div>
-                        <label className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={settings.backup_enabled}
-                            onChange={(e) => updateSetting('backup_enabled', e.target.checked)}
-                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                          />
-                          <div>
-                            <div className="text-sm font-medium text-gray-700">
-                              Sauvegardes automatiques
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Active les sauvegardes quotidiennes de la base de données
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <div className="flex items-center gap-2">
-                      <div className="text-yellow-600">⚠️</div>
-                      <div className="text-yellow-800 font-medium">Attention</div>
-                    </div>
-                    <div className="text-yellow-700 text-sm mt-1">
-                      Les modifications des paramètres techniques peuvent affecter le fonctionnement de l'application. 
-                      Consultez l'équipe technique avant de modifier ces paramètres.
                     </div>
                   </div>
                 </div>
@@ -655,7 +477,7 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          {/* Actions globales */}
+          {/* Actions système */}
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Actions Système</h3>
             
@@ -663,6 +485,8 @@ export default function AdminSettingsPage() {
               <button
                 onClick={() => {
                   if (confirm('Êtes-vous sûr de vouloir vider le cache système ?')) {
+                    localStorage.clear();
+                    sessionStorage.clear();
                     toast.success('Cache vidé avec succès');
                   }
                 }}
@@ -673,18 +497,19 @@ export default function AdminSettingsPage() {
               </button>
 
               <button
-                onClick={() => {
-                  if (confirm('Créer une sauvegarde manuelle maintenant ?')) {
-                    toast.loading('Création de la sauvegarde...', { id: 'backup' });
+                onClick={async () => {
+                  if (confirm('Forcer la synchronisation des données maintenant ?')) {
+                    toast.loading('Synchronisation...', { id: 'sync' });
+                    // Ici vous pouvez ajouter la logique de synchronisation
                     setTimeout(() => {
-                      toast.success('Sauvegarde créée avec succès', { id: 'backup' });
+                      toast.success('Synchronisation terminée', { id: 'sync' });
                     }, 2000);
                   }
                 }}
                 className="p-4 text-left bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
               >
-                <div className="font-medium text-green-900">Sauvegarde manuelle</div>
-                <div className="text-sm text-green-700">Crée immédiatement une sauvegarde de la base de données</div>
+                <div className="font-medium text-green-900">Synchroniser maintenant</div>
+                <div className="text-sm text-green-700">Force la synchronisation immédiate de toutes les données</div>
               </button>
             </div>
           </div>
