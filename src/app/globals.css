@@ -24,3 +24,67 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ✨ FIX POUR LA VISIBILITÉ DES INPUTS */
+input[type="text"],
+input[type="email"], 
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+textarea,
+select {
+  /* Forcer la couleur du texte à être visible */
+  color: #1f2937 !important; /* Gris foncé pour le texte */
+  background-color: #ffffff !important; /* Fond blanc */
+}
+
+/* Placeholder plus visible */
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af !important; /* Gris moyen pour les placeholders */
+  opacity: 1 !important;
+}
+
+/* Focus states plus visibles */
+input:focus,
+textarea:focus,
+select:focus {
+  color: #111827 !important; /* Texte encore plus foncé au focus */
+  background-color: #ffffff !important;
+  outline: 2px solid #dc2626 !important; /* Bordure rouge au focus */
+  outline-offset: -2px !important;
+}
+
+/* Fix spécifique pour les selects */
+select option {
+  color: #1f2937 !important;
+  background-color: #ffffff !important;
+}
+
+/* Fix pour les inputs dans les modals et overlays */
+.modal input,
+.overlay input,
+div[role="dialog"] input {
+  color: #1f2937 !important;
+  background-color: #ffffff !important;
+}
+
+/* Améliorer le contraste pour tous les éléments de formulaire */
+label {
+  color: #374151 !important;
+  font-weight: 500 !important;
+}
+
+/* Fix pour les boutons */
+button:disabled {
+  opacity: 0.6 !important;
+}
+
+/* Style pour les éléments actifs/sélectionnés */
+.bg-red-100 {
+  background-color: #fee2e2 !important;
+}
+
+.text-red-700 {
+  color: #b91c1c !important;
+}
