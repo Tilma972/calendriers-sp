@@ -1,4 +1,4 @@
-// src/shared/stores/auth.ts
+// src/shared/stores/auth.ts - Avec redirection automatique
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase, getCurrentUserProfile } from '@/shared/lib/supabase';
@@ -23,6 +23,27 @@ interface AuthState {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
+
+// Helper pour redirection basée sur le rôle
+const redirectByRole = (profile: UserProfile | null) => {
+  if (typeof window === 'undefined') return; // SSR check
+
+  const currentPath = window.location.pathname;
+  
+  if (profile?.role === 'tresorier') {
+    // Trésorier : rediriger vers admin s'il n'y est pas déjà
+    if (!currentPath.startsWith('/admin')) {
+      console.log('🏛️ Redirecting treasurer to admin dashboard');
+      window.location.replace('/admin');
+    }
+  } else {
+    // Non-trésorier : rediriger vers accueil s'il est sur admin
+    if (currentPath.startsWith('/admin')) {
+      console.log('🚫 Redirecting non-treasurer away from admin');
+      window.location.replace('/');
+    }
+  }
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -59,6 +80,10 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               isInitialized: true,
             });
+
+            // ✨ REDIRECTION AUTOMATIQUE APRÈS INITIALISATION
+            setTimeout(() => redirectByRole(profile), 100);
+            
           } else {
             set({ 
               user: null, 
@@ -81,6 +106,12 @@ export const useAuthStore = create<AuthState>()(
                 profile,
                 isLoading: false,
               });
+
+              // ✨ REDIRECTION AUTOMATIQUE APRÈS CONNEXION
+              if (event === 'SIGNED_IN') {
+                setTimeout(() => redirectByRole(profile), 100);
+              }
+              
             } else {
               set({
                 user: null,
@@ -111,7 +142,7 @@ export const useAuthStore = create<AuthState>()(
             return { error: error.message };
           }
 
-          // Le profil sera chargé automatiquement via onAuthStateChange
+          // La redirection sera gérée par onAuthStateChange
           return {};
         } catch (error: any) {
           set({ isLoading: false });
@@ -163,13 +194,19 @@ export const useAuthStore = create<AuthState>()(
             console.error('Signout error:', error);
           }
           
-          // Reset du state (sera fait automatiquement via onAuthStateChange)
+          // Reset du state et redirection vers accueil
           set({ 
             user: null, 
             profile: null, 
             session: null, 
             isLoading: false 
           });
+
+          // Rediriger vers la page d'accueil après déconnexion
+          if (typeof window !== 'undefined') {
+            window.location.replace('/');
+          }
+          
         } catch (error) {
           console.error('Signout error:', error);
           set({ isLoading: false });
@@ -184,6 +221,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           const profile = await getCurrentUserProfile();
           set({ profile });
+          
+          // Vérifier si redirection nécessaire après refresh du profil
+          setTimeout(() => redirectByRole(profile), 100);
         } catch (error) {
           console.error('Error refreshing profile:', error);
         }
