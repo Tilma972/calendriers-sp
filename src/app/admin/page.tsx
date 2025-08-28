@@ -31,7 +31,7 @@ interface RecentActivity {
 }
 
 export default function AdminDashboard() {
-  const { profile } = useAuthStore();
+  const { profile, signOut } = useAuthStore();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +73,7 @@ export default function AdminDashboard() {
       const users = usersData.data || [];
       const teams = teamsData.data || [];
       const transactionsToday = transactionsTodayData.data || [];
-      
+
       const adminStats: AdminStats = {
         users_total: users.length,
         users_active: users.filter(u => u.is_active).length,
@@ -147,7 +147,7 @@ export default function AdminDashboard() {
                 <div className="text-2xl">⚙️</div>
                 <h1 className="text-xl font-bold text-gray-900">Administration</h1>
               </div>
-              
+
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <div className="text-sm font-medium text-gray-900">
@@ -155,13 +155,17 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-xs text-gray-500">Trésorier</div>
                 </div>
-                
-                <a
-                  href="/"
+
+                {/* ✨ NOUVEAU : Bouton déconnexion au lieu de "Retour App" */}
+                <button
+                  onClick={() => {
+                    console.log('🚪 Déconnexion depuis admin');
+                    signOut();
+                  }}
                   className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm transition-colors"
                 >
-                  Retour App
-                </a>
+                  Déconnexion
+                </button>
               </div>
             </div>
           </div>
@@ -289,7 +293,7 @@ export default function AdminDashboard() {
                     <div className="text-sm text-gray-500">Ajouter un nouveau sapeur ou chef</div>
                   </div>
                 </a>
-                
+
                 <a
                   href="/admin/teams/new"
                   className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
