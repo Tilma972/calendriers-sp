@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const { profile, signOut } = useAuthStore();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -65,14 +66,22 @@ export default function AdminDashboard() {
           .from('transactions')
           .select('id')
           .eq('status', 'pending'),
+        // Utilisateurs en attente
+        supabase
+          .from('profiles')
+          .select('id')
+          .eq('is_active', false),
       ]);
 
-      const [usersData, teamsData, tourneesTodayData, transactionsTodayData, pendingData] = statsPromises;
+      const [usersData, teamsData, tourneesTodayData, transactionsTodayData, pendingData, pendingUsersData] = statsPromises;
 
       // Calculer les statistiques
       const users = usersData.data || [];
       const teams = teamsData.data || [];
       const transactionsToday = transactionsTodayData.data || [];
+      const pendingUsersDataResult = pendingUsersData.data || [];
+
+      setPendingUsers(pendingUsersDataResult);
 
       const adminStats: AdminStats = {
         users_total: users.length,
@@ -204,6 +213,12 @@ export default function AdminDashboard() {
                 className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
               >
                 Paramètres
+              </a>
+              <a
+                href="/admin/pending"
+                className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+              >
+                Demandes ({pendingUsers.length})
               </a>
             </div>
           </nav>
