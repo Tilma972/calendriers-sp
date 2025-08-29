@@ -25,19 +25,30 @@ interface AuthState {
 }
 
 // Helper pour redirection basée sur le rôle
-const redirectByRole = (profile: UserProfile | null) => {
+const redirectByRole = (profile: UserProfile | null, event?: string) => {
   if (typeof window === 'undefined') return; // SSR check
 
   const currentPath = window.location.pathname;
   
-  if (profile?.role === 'tresorier') {
-    // Trésorier : rediriger vers admin s'il n'y est pas déjà
-    if (!currentPath.startsWith('/admin')) {
-      console.log('🏛️ Redirecting treasurer to admin dashboard');
-      window.location.replace('/admin');
+  // Si utilisateur non actif, rediriger vers page d'attente
+  if (profile && !profile.is_active) {
+    if (!currentPath.startsWith('/pending')) {
+      console.log('⏳ Redirecting inactive user to pending page');
+      window.location.replace('/pending');
+      return;
     }
-  } else {
-    // Non-trésorier : rediriger vers accueil s'il est sur admin
+  }
+  
+  if (profile?.role === 'tresorier' && profile.is_active) {
+    // ✨ SEULEMENT rediriger lors de la première connexion ou du refresh
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      if (!currentPath.startsWith('/admin')) {
+        console.log('🏛️ Redirecting treasurer to admin dashboard');
+        window.location.replace('/admin');
+      }
+    }
+  } else if (profile && profile.is_active) {
+    // Non-trésorier actif : bloquer l'accès admin
     if (currentPath.startsWith('/admin')) {
       console.log('🚫 Redirecting non-treasurer away from admin');
       window.location.replace('/');
@@ -81,8 +92,8 @@ export const useAuthStore = create<AuthState>()(
               isInitialized: true,
             });
 
-            // ✨ REDIRECTION AUTOMATIQUE APRÈS INITIALISATION
-            setTimeout(() => redirectByRole(profile), 100);
+            // ✨ REDIRECTION SEULEMENT AU PREMIER CHARGEMENT
+            setTimeout(() => redirectByRole(profile, 'INITIAL_SESSION'), 100);
             
           } else {
             set({ 
@@ -107,9 +118,9 @@ export const useAuthStore = create<AuthState>()(
                 isLoading: false,
               });
 
-              // ✨ REDIRECTION AUTOMATIQUE APRÈS CONNEXION
+              // ✨ REDIRECTION SEULEMENT LORS DE LA CONNEXION
               if (event === 'SIGNED_IN') {
-                setTimeout(() => redirectByRole(profile), 100);
+                setTimeout(() => redirectByRole(profile, 'SIGNED_IN'), 100);
               }
               
             } else {
@@ -173,7 +184,17 @@ export const useAuthStore = create<AuthState>()(
           // Si signup réussi mais confirmation email requise
           if (data.user && !data.session) {
             set({ isLoading: false });
-            return { error: 'Vérifiez votre email pour confirmer votre compte' };
+            return { 
+              error: 'Inscription réussie ! Vérifiez votre email pour confirmer votre compte. Votre demande sera ensuite validée par un administrateur.' 
+            };
+          }
+
+          // Si signup réussi avec session immédiate (email confirmé)
+          if (data.user && data.session) {
+            set({ isLoading: false });
+            return { 
+              error: 'Inscription réussie ! Votre demande est en attente de validation par un administrateur.' 
+            };
           }
 
           return {};
@@ -222,8 +243,11 @@ export const useAuthStore = create<AuthState>()(
           const profile = await getCurrentUserProfile();
           set({ profile });
           
-          // Vérifier si redirection nécessaire après refresh du profil
-          setTimeout(() => redirectByRole(profile), 100);
+          // Vérifier si redirection nécessaire après refresh du profil (seulement si changement de rôle)
+          const currentProfile = get().profile;
+          if (currentProfile?.role !== profile?.role) {
+            setTimeout(() => redirectByRole(profile, 'ROLE_CHANGE'), 100);
+          }
         } catch (error) {
           console.error('Error refreshing profile:', error);
         }
