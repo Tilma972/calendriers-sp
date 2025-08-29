@@ -33,24 +33,23 @@ function useAdminUsers() {
     try {
       setIsLoading(true);
 
-      // Charger utilisateurs avec équipes (avec retry automatique)
+      // Charger utilisateurs SANS jointure
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
         .select(`
-          id,
-          email,
-          full_name,
-          role,
-          team_id,
-          is_active,
-          created_at,
-          teams(name)
-        `)
+        id,
+        email,
+        full_name,
+        role,
+        team_id,
+        is_active,
+        created_at
+      `)
         .order('created_at', { ascending: false });
 
       if (usersError) throw usersError;
 
-      // Charger équipes pour les selects
+      // Charger équipes pour les selects ET les noms
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
         .select('id, name, color')
@@ -58,7 +57,12 @@ function useAdminUsers() {
 
       if (teamsError) throw teamsError;
 
-      // Format des données
+      // Créer un map des équipes pour lookup rapide
+      const teamsMap = Object.fromEntries(
+        (teamsData || []).map(team => [team.id, team.name])
+      );
+
+      // Format des données avec jointure manuelle
       if (usersData) {
         const formattedUsers: User[] = usersData.map(user => ({
           id: user.id,
@@ -66,7 +70,7 @@ function useAdminUsers() {
           full_name: user.full_name || '',
           role: user.role,
           team_id: user.team_id,
-          team_name: user.teams?.name || null,
+          team_name: user.team_id ? teamsMap[user.team_id] || null : null,
           is_active: user.is_active,
           created_at: user.created_at,
         }));
@@ -95,21 +99,21 @@ function useAdminUsers() {
     }
 
     // 2. Mise à jour optimiste (UI instantanée)
-    setUsers(prev => 
-      prev.map(user => 
-        user.id === userId 
+    setUsers(prev =>
+      prev.map(user =>
+        user.id === userId
           ? { ...user, ...updates }
           : user
       )
     );
 
     // 3. Notification immédiate
-    const actionText = 
+    const actionText =
       updates.role ? `Rôle changé vers ${updates.role}` :
-      updates.team_id !== undefined ? 'Équipe modifiée' :
-      updates.is_active !== undefined ? (updates.is_active ? 'Activé' : 'Désactivé') :
-      'Modifié';
-    
+        updates.team_id !== undefined ? 'Équipe modifiée' :
+          updates.is_active !== undefined ? (updates.is_active ? 'Activé' : 'Désactivé') :
+            'Modifié';
+
     toast.loading(`${actionText}...`, { id: `update-${userId}` });
 
     try {
@@ -123,18 +127,18 @@ function useAdminUsers() {
 
       // 5. Succès
       toast.success(`${actionText} avec succès`, { id: `update-${userId}` });
-      
+
       // Recharger les données pour être sûr
       setTimeout(() => loadData(), 500);
 
     } catch (error: any) {
       // 6. Rollback en cas d'erreur
-      setUsers(prev => 
-        prev.map(user => 
+      setUsers(prev =>
+        prev.map(user =>
           user.id === userId ? originalUser : user
         )
       );
-      
+
       console.error('Erreur mise à jour:', error);
       toast.error(`Erreur: ${error.message}`, { id: `update-${userId}` });
     }
@@ -145,7 +149,7 @@ function useAdminUsers() {
 
 export default function AdminUsersPage() {
   const { users, teams, isLoading, loadData, updateUser } = useAdminUsers();
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -236,17 +240,17 @@ export default function AdminUsersPage() {
   // Gestion réinitialisation mot de passe
   const handleResetPassword = async (userId: string, userEmail: string) => {
     const loadingToast = toast.loading('Envoi email de réinitialisation...');
-    
+
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`
       });
 
       if (error) throw error;
-      
+
       toast.success('Email de réinitialisation envoyé');
       setShowResetModal(null);
-      
+
     } catch (error: any) {
       console.error('Erreur reset password:', error);
       toast.error(`Erreur: ${error.message}`);
@@ -257,12 +261,12 @@ export default function AdminUsersPage() {
 
   // Filtrage des utilisateurs
   const filteredUsers = users.filter(user => {
-    const matchesSearch = 
+    const matchesSearch =
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesRole = filterRole === 'all' || user.role === filterRole;
-    
+
     return matchesSearch && matchesRole;
   });
 
@@ -291,7 +295,7 @@ export default function AdminUsersPage() {
                 <div className="text-2xl">👥</div>
                 <h1 className="text-xl font-bold text-gray-900">Gestion Utilisateurs</h1>
               </div>
-              
+
               <button
                 onClick={() => setShowCreateForm(true)}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
@@ -315,7 +319,7 @@ export default function AdminUsersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
                 />
               </div>
-              
+
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
@@ -327,7 +331,7 @@ export default function AdminUsersPage() {
                 <option value="tresorier">Trésoriers</option>
               </select>
             </div>
-            
+
             <div className="mt-4 text-sm text-gray-600">
               {filteredUsers.length} utilisateur(s) • {users.filter(u => u.is_active).length} actif(s)
             </div>
@@ -370,7 +374,7 @@ export default function AdminUsersPage() {
                           <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
                           value={user.role}
@@ -382,7 +386,7 @@ export default function AdminUsersPage() {
                           <option value="tresorier">Trésorier</option>
                         </select>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
                           value={user.team_id || ''}
@@ -397,24 +401,23 @@ export default function AdminUsersPage() {
                           ))}
                         </select>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           onClick={() => updateUser(user.id, { is_active: !user.is_active })}
-                          className={`px-2 py-1 text-xs rounded-full ${
-                            user.is_active
+                          className={`px-2 py-1 text-xs rounded-full ${user.is_active
                               ? 'bg-green-100 text-green-800'
                               : 'bg-red-100 text-red-800'
-                          }`}
+                            }`}
                         >
                           {user.is_active ? 'Actif' : 'Inactif'}
                         </button>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <button
                           onClick={() => setShowResetModal(user.id)}
@@ -437,7 +440,7 @@ export default function AdminUsersPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   Créer un Nouvel Utilisateur
                 </h3>
-                
+
                 <form onSubmit={handleCreateUser} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -540,7 +543,7 @@ export default function AdminUsersPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   Réinitialiser le mot de passe
                 </h3>
-                
+
                 <p className="text-gray-600 mb-6">
                   Un email de réinitialisation sera envoyé à l'utilisateur.
                 </p>
