@@ -247,6 +247,12 @@ export default function AdminDashboard() {
                   📧 Reçus
                 </a>
                 <a
+                  href="/admin/email-stats"
+                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  📈 Stats Emails
+                </a>
+                <a
                   href="/admin/pending"
                   className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
                 >

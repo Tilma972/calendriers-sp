@@ -1,7 +1,10 @@
 // src/shared/services/emailService.ts - Service d'envoi d'emails avec SMTP Supabase
 import { supabase } from '@/shared/lib/supabase';
+import { ReceiptTemplateService, type ReceiptData } from '@/shared/templates/receipt-template';
+import { EmailLogService, ReceiptStorageService, type EmailLogData } from '@/shared/services/storageService';
 
-interface ReceiptEmailData {
+// Interface pour les données de reçu (étendue)
+interface ReceiptEmailDataExtended {
   donatorEmail: string;
   donatorName?: string;
   amount: number;
@@ -10,6 +13,8 @@ interface ReceiptEmailData {
   receiptNumber: string;
   transactionDate: string;
   receiptUrl?: string;
+  sapeurName: string; // Nom du sapeur collecteur
+  teamName?: string; // Nom de l'équipe
 }
 
 interface EmailTemplate {
@@ -23,7 +28,7 @@ class EmailService {
   private readonly organizationName = 'Sapeurs-Pompiers Calendriers 2025';
 
   /**
-   * Génère un numéro de reçu unique
+   * Génère un numéro de reçu unique amélioré
    */
   generateReceiptNumber(): string {
     const now = new Date();
@@ -36,155 +41,112 @@ class EmailService {
   }
 
   /**
-   * Génère le template d'email de reçu
+   * Génère le template d'email avec le nouveau système
    */
-  generateReceiptTemplate(data: ReceiptEmailData): EmailTemplate {
-    const {
-      donatorName,
-      amount,
-      calendarsGiven,
-      paymentMethod,
-      receiptNumber,
-      transactionDate,
-    } = data;
+  async generateReceiptTemplate(data: ReceiptEmailDataExtended): Promise<EmailTemplate> {
+    try {
+      // Récupérer les paramètres email
+      const settings = await ReceiptTemplateService.getEmailSettings();
+      
+      // Préparer les données pour le template
+      const receiptData: ReceiptData = {
+        receiptNumber: data.receiptNumber,
+        donationDate: data.transactionDate,
+        donatorName: data.donatorName || 'Donateur anonyme',
+        donatorEmail: data.donatorEmail,
+        amount: data.amount,
+        calendarsGiven: data.calendarsGiven,
+        paymentMethod: data.paymentMethod,
+        sapeurName: data.sapeurName,
+        teamName: data.teamName,
+        associationName: settings.association_name,
+        associationAddress: settings.association_address,
+        associationSiren: settings.association_siren,
+        associationRNA: settings.association_rna,
+        legalText: settings.legal_text,
+        enableTracking: settings.enable_tracking
+      };
 
-    const formattedDate = new Date(transactionDate).toLocaleDateString('fr-FR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+      // Générer HTML et texte avec le nouveau template
+      const htmlBody = ReceiptTemplateService.generateReceiptHTML(receiptData);
+      const textBody = ReceiptTemplateService.generateReceiptText(receiptData);
+      
+      const subject = `Reçu de don - ${settings.association_name} - N°${data.receiptNumber}`;
 
-    const paymentMethodText = {
-      especes: 'Espèces',
-      cheque: 'Chèque',
-      carte: 'Carte bancaire',
-      virement: 'Virement'
-    }[paymentMethod as keyof typeof paymentMethodText] || paymentMethod;
+      return { subject, htmlBody, textBody };
+      
+    } catch (error) {
+      console.error('Erreur génération template:', error);
+      // Fallback vers l'ancien système en cas d'erreur
+      return this.generateBasicTemplate(data);
+    }
+  }
 
-    const subject = `Reçu de don - ${this.organizationName} - N°${receiptNumber}`;
-
+  /**
+   * Fallback vers l'ancien template en cas d'erreur
+   */
+  private generateBasicTemplate(data: ReceiptEmailDataExtended): EmailTemplate {
+    const subject = `Reçu de don - ${this.organizationName} - N°${data.receiptNumber}`;
+    
     const htmlBody = `
-      <!DOCTYPE html>
-      <html lang="fr">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Reçu de don</title>
-        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; }
-          .header { background: #dc2626; color: white; padding: 20px; text-align: center; }
-          .logo { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-          .content { padding: 30px 20px; }
-          .receipt-box { border: 2px solid #dc2626; border-radius: 10px; padding: 20px; margin: 20px 0; }
-          .amount { font-size: 28px; font-weight: bold; color: #dc2626; text-align: center; margin: 20px 0; }
-          .details { margin: 20px 0; }
-          .detail-row { display: flex; justify-content: space-between; margin: 10px 0; padding: 5px 0; }
-          .detail-label { font-weight: bold; }
-          .footer { background: #f5f5f5; padding: 20px; font-size: 12px; text-align: center; color: #666; }
-          .thanks { background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 15px; margin: 20px 0; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="logo">🚒 ${this.organizationName}</div>
-          <p>Merci pour votre soutien à nos sapeurs-pompiers</p>
-        </div>
-        
-        <div class="content">
-          <h2>Reçu de don</h2>
-          
-          ${donatorName ? `<p>Bonjour ${donatorName},</p>` : '<p>Bonjour,</p>'}
-          
-          <p>Nous vous remercions chaleureusement pour votre don qui nous permet de continuer notre mission au service de la communauté.</p>
-          
-          <div class="receipt-box">
-            <div class="amount">${amount}€</div>
-            
-            <div class="details">
-              <div class="detail-row">
-                <span class="detail-label">N° de reçu :</span>
-                <span>${receiptNumber}</span>
-              </div>
-              
-              <div class="detail-row">
-                <span class="detail-label">Date :</span>
-                <span>${formattedDate}</span>
-              </div>
-              
-              <div class="detail-row">
-                <span class="detail-label">Montant :</span>
-                <span>${amount}€</span>
-              </div>
-              
-              <div class="detail-row">
-                <span class="detail-label">Calendriers :</span>
-                <span>${calendarsGiven} calendrier${calendarsGiven > 1 ? 's' : ''}</span>
-              </div>
-              
-              <div class="detail-row">
-                <span class="detail-label">Mode de paiement :</span>
-                <span>${paymentMethodText}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="thanks">
-            <h3>🙏 Merci pour votre générosité !</h3>
-            <p>Votre contribution nous aide à maintenir nos équipements et à assurer notre mission de secours auprès de la population.</p>
-          </div>
-          
-          <p><strong>Important :</strong> Conservez ce reçu comme justificatif de votre don. Il pourra vous être utile pour vos déclarations fiscales si applicable.</p>
-        </div>
-        
-        <div class="footer">
-          <p>Ce reçu a été généré automatiquement le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}.</p>
-          <p>${this.organizationName}<br>
-          Email: ${this.fromEmail}</p>
-        </div>
-      </body>
-      </html>
+      <h1>Reçu de don</h1>
+      <p>Merci ${data.donatorName || ''} pour votre don de ${data.amount}€</p>
+      <p>N° de reçu: ${data.receiptNumber}</p>
+      <p>Calendriers: ${data.calendarsGiven}</p>
+      <p>Sapeur-Pompier: ${data.sapeurName}</p>
     `;
-
+    
     const textBody = `
-REÇU DE DON - ${this.organizationName}
-
-${donatorName ? `Bonjour ${donatorName},` : 'Bonjour,'}
-
-Nous vous remercions chaleureusement pour votre don qui nous permet de continuer notre mission au service de la communauté.
-
-DÉTAILS DU DON:
-- N° de reçu : ${receiptNumber}
-- Date : ${formattedDate}
-- Montant : ${amount}€
-- Calendriers : ${calendarsGiven} calendrier${calendarsGiven > 1 ? 's' : ''}
-- Mode de paiement : ${paymentMethodText}
-
-MERCI POUR VOTRE GÉNÉROSITÉ !
-Votre contribution nous aide à maintenir nos équipements et à assurer notre mission de secours auprès de la population.
-
-IMPORTANT : Conservez ce reçu comme justificatif de votre don. Il pourra vous être utile pour vos déclarations fiscales si applicable.
-
----
-Ce reçu a été généré automatiquement le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}.
-${this.organizationName}
-Email: ${this.fromEmail}
+      Reçu de don
+      Merci ${data.donatorName || ''} pour votre don de ${data.amount}€
+      N° de reçu: ${data.receiptNumber}
+      Calendriers: ${data.calendarsGiven}
+      Sapeur-Pompier: ${data.sapeurName}
     `;
 
     return { subject, htmlBody, textBody };
   }
 
   /**
-   * Envoie un email de reçu via l'API Supabase Edge Function
+   * Envoie un email de reçu via l'API Supabase Edge Function avec logging complet
    */
-  async sendReceiptEmail(data: ReceiptEmailData): Promise<{ success: boolean; error?: string }> {
+  async sendReceiptEmail(
+    data: ReceiptEmailDataExtended, 
+    transactionId: string
+  ): Promise<{ success: boolean; error?: string; logId?: string }> {
+    let logId: string | undefined;
+    
     try {
       console.log('📧 Préparation envoi email reçu...', {
         to: data.donatorEmail,
         receiptNumber: data.receiptNumber,
-        amount: data.amount
+        amount: data.amount,
+        sapeur: data.sapeurName
       });
 
-      const template = this.generateReceiptTemplate(data);
+      // Générer le template avec le nouveau système
+      const template = await this.generateReceiptTemplate(data);
+
+      // Créer le log initial
+      const logResult = await EmailLogService.createEmailLog({
+        transactionId,
+        emailTo: data.donatorEmail,
+        subject: template.subject,
+        status: 'pending',
+        receiptNumber: data.receiptNumber
+      });
+      
+      if (logResult.success && logResult.id) {
+        logId = logResult.id;
+      }
+
+      // Archiver le HTML (optionnel pour traçabilité)
+      try {
+        await ReceiptStorageService.uploadReceiptHTML(template.htmlBody, data.receiptNumber);
+      } catch (storageError) {
+        console.warn('⚠️ Erreur archivage HTML:', storageError);
+        // Non bloquant
+      }
 
       // Utilisation de l'API Supabase Edge Function pour l'envoi d'email
       const { data: result, error } = await supabase.functions.invoke('send-receipt-email', {
@@ -198,21 +160,49 @@ Email: ${this.fromEmail}
             receiptNumber: data.receiptNumber,
             amount: data.amount,
             donatorName: data.donatorName,
+            sapeurName: data.sapeurName,
+            transactionId
           }
         }
       });
 
       if (error) {
         console.error('❌ Erreur envoi email:', error);
-        return { success: false, error: error.message };
+        
+        // Mettre à jour le log avec l'erreur
+        if (logId) {
+          await EmailLogService.updateEmailLog(logId, {
+            status: 'failed',
+            errorMessage: error.message
+          });
+        }
+        
+        return { success: false, error: error.message, logId };
       }
 
       console.log('✅ Email reçu envoyé avec succès:', result);
-      return { success: true };
+      
+      // Mettre à jour le log avec le succès
+      if (logId) {
+        await EmailLogService.updateEmailLog(logId, {
+          status: 'sent'
+        });
+      }
+
+      return { success: true, logId };
 
     } catch (error: any) {
       console.error('❌ Erreur service email:', error);
-      return { success: false, error: error.message || 'Erreur inconnue' };
+      
+      // Mettre à jour le log avec l'erreur
+      if (logId) {
+        await EmailLogService.updateEmailLog(logId, {
+          status: 'failed',
+          errorMessage: error.message || 'Erreur inconnue'
+        });
+      }
+      
+      return { success: false, error: error.message || 'Erreur inconnue', logId };
     }
   }
 
@@ -248,18 +238,29 @@ Email: ${this.fromEmail}
   }
 
   /**
-   * Processus complet d'envoi de reçu pour une transaction
+   * Processus complet d'envoi de reçu pour une transaction avec informations enrichies
    */
-  async processReceiptForTransaction(transactionId: string): Promise<{ success: boolean; error?: string; receiptNumber?: string }> {
+  async processReceiptForTransaction(transactionId: string): Promise<{ success: boolean; error?: string; receiptNumber?: string; logId?: string }> {
     try {
-      // 1. Récupérer les détails de la transaction
+      // 1. Récupérer les détails de la transaction avec les infos sapeur et équipe
       const { data: transaction, error: fetchError } = await supabase
         .from('transactions')
-        .select('*')
+        .select(`
+          *,
+          profiles!transactions_user_id_fkey (
+            id,
+            full_name,
+            team_id,
+            teams (
+              name
+            )
+          )
+        `)
         .eq('id', transactionId)
         .single();
 
       if (fetchError || !transaction) {
+        console.error('Erreur récupération transaction:', fetchError);
         return { success: false, error: 'Transaction introuvable' };
       }
 
@@ -269,11 +270,16 @@ Email: ${this.fromEmail}
         return { success: false, error: 'Aucun email de donateur fourni' };
       }
 
-      // 3. Générer le numéro de reçu si pas déjà présent
+      // 3. Extraire les informations du sapeur et de l'équipe
+      const sapeurProfile = transaction.profiles;
+      const sapeurName = sapeurProfile?.full_name || 'Sapeur-Pompier';
+      const teamName = sapeurProfile?.teams?.name;
+
+      // 4. Générer le numéro de reçu si pas déjà présent
       const receiptNumber = transaction.receipt_number || this.generateReceiptNumber();
 
-      // 4. Préparer les données d'email
-      const emailData: ReceiptEmailData = {
+      // 5. Préparer les données d'email avec toutes les informations
+      const emailData: ReceiptEmailDataExtended = {
         donatorEmail: transaction.donator_email,
         donatorName: transaction.donator_name || undefined,
         amount: transaction.amount,
@@ -281,22 +287,32 @@ Email: ${this.fromEmail}
         paymentMethod: transaction.payment_method,
         receiptNumber,
         transactionDate: transaction.created_at || new Date().toISOString(),
+        sapeurName,
+        teamName
       };
 
-      // 5. Envoyer l'email
-      const emailResult = await this.sendReceiptEmail(emailData);
+      // 6. Envoyer l'email avec logging
+      const emailResult = await this.sendReceiptEmail(emailData, transactionId);
       if (!emailResult.success) {
-        return { success: false, error: `Erreur envoi email: ${emailResult.error}` };
+        return { 
+          success: false, 
+          error: `Erreur envoi email: ${emailResult.error}`,
+          logId: emailResult.logId 
+        };
       }
 
-      // 6. Mettre à jour la transaction avec le numéro de reçu
+      // 7. Mettre à jour la transaction avec le numéro de reçu
       const updateResult = await this.updateTransactionReceipt(transactionId, receiptNumber);
       if (!updateResult.success) {
         console.warn('⚠️ Email envoyé mais erreur mise à jour transaction:', updateResult.error);
         // On ne retourne pas d'erreur car l'email a été envoyé
       }
 
-      return { success: true, receiptNumber };
+      return { 
+        success: true, 
+        receiptNumber,
+        logId: emailResult.logId 
+      };
 
     } catch (error: any) {
       console.error('❌ Erreur processus reçu complet:', error);
