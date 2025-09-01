@@ -5,10 +5,19 @@ Ce guide détaille la configuration et l'installation du système de génératio
 ## 🏗️ Architecture du système
 
 ```
-Transaction → ReceiptService → n8n Workflow → Gotenberg PDF → Email SMTP
-                ↓                                ↓
-              Supabase Logs              PDF Stocké + Callback
+Frontend/App → API /api/donations/send-receipt → ReceiptService → n8n Workflow
+                        ↓                              ↓                ↓
+                 Idempotence Cache              Supabase Logs      Gotenberg PDF → SMTP Email
+                        ↓                              ↑                           ↓
+                 ReceiptStorageService ← Callback /api/webhooks/n8n-callback ← n8n Response
 ```
+
+### Nouveautés v2.0 :
+- **API Route dédiée** : `/api/donations/send-receipt` avec idempotence
+- **ReceiptStorageService** : Gestion centralisée des logs et stockage
+- **Cache d'idempotence** : Évite les doublons sur 5 minutes
+- **Health monitoring** : Endpoints GET/DELETE pour surveillance
+- **Interface de test** : Composant intégré pour valider l'API
 
 ## 📋 Prérequis
 
@@ -144,24 +153,112 @@ docker run -d \
 - Utilisez "⚙️ Config" pour vérifier la configuration
 - "🔗 Test n8n" pour tester la connexion
 - "🧪 Test reçu" pour générer un PDF de test
+- **NOUVEAU** : Section "Test API Send-Receipt" pour tester l'API complète
 
-### 2. Tests manuels
-```typescript
-// Test de configuration
-await ReceiptService.validateEnvironment();
+### 2. API Tests directs
 
-// Test de connexion n8n
-await ReceiptService.testN8nConnection();
-
-// Test de génération complète
-await ReceiptService.testReceiptGeneration();
+#### Test simple
+```bash
+curl -X POST http://localhost:3000/api/donations/send-receipt \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transactionId": "votre-transaction-id",
+    "donatorInfo": {
+      "name": "Jean Dupont Test",
+      "email": "jean.test@example.com"
+    },
+    "options": {
+      "quality": "standard",
+      "sendEmail": true
+    }
+  }'
 ```
 
-### 3. Test avec une vraie transaction
-```typescript
-// Via l'interface ou le code
-await ReceiptIntegrationService.testWithRealTransaction(transactionId);
+#### Health Check
+```bash
+curl http://localhost:3000/api/donations/send-receipt
 ```
+
+#### Clear Cache
+```bash
+curl -X DELETE http://localhost:3000/api/donations/send-receipt?force=true
+```
+
+### 3. Tests avec le hook React
+```typescript
+import { useSendReceipt } from '@/shared/hooks/useSendReceipt';
+
+const { sendReceipt, generateTestPDF, checkHealth } = useSendReceipt();
+
+// Envoyer un reçu
+const result = await sendReceipt('transaction-id', {
+  donatorInfo: { email: 'test@example.com' },
+  options: { quality: 'draft' }
+});
+
+// Test PDF seulement
+const pdfResult = await generateTestPDF('transaction-id');
+
+// Check santé API
+const health = await checkHealth();
+```
+
+### 4. Tests d'idempotence
+```typescript
+// Ces deux appels successifs ne génèreront qu'un seul reçu
+await sendReceipt('same-transaction-id');
+await sendReceipt('same-transaction-id'); // ← Réponse depuis le cache
+```
+
+## 📡 API Routes
+
+### 1. POST `/api/donations/send-receipt`
+**Envoie un reçu pour une transaction avec idempotence**
+
+```json
+{
+  "transactionId": "uuid-required",
+  "resend": false,
+  "donatorInfo": {
+    "name": "Nom donateur (optionnel)",
+    "email": "email@example.com (optionnel si déjà dans la transaction)"
+  },
+  "sapeurInfo": {
+    "name": "Nom sapeur (optionnel)"
+  },
+  "options": {
+    "quality": "draft|standard|high",
+    "sendEmail": true
+  }
+}
+```
+
+**Réponse :**
+```json
+{
+  "success": true,
+  "receiptNumber": "RECU-2024-01-15-ABC123",
+  "emailTo": "donateur@example.com",
+  "workflowId": "n8n-workflow-id",
+  "message": "Reçu envoyé avec succès",
+  "fromCache": false,
+  "transactionId": "uuid"
+}
+```
+
+### 2. GET `/api/donations/send-receipt`
+**Health check et monitoring de l'API**
+
+Retourne l'état de santé complet de l'API : n8n, storage, database, cache.
+
+### 3. DELETE `/api/donations/send-receipt?force=true`
+**Nettoyage du cache d'idempotence**
+
+- Sans `force` : supprime les entrées expirées
+- Avec `force=true` : vide complètement le cache
+
+### 4. POST `/api/webhooks/n8n-callback`
+**Callback automatique depuis n8n (déjà implémenté)**
 
 ## 🔍 Monitoring et logs
 
@@ -210,6 +307,21 @@ await ReceiptIntegrationService.testWithRealTransaction(transactionId);
 - Vérifiez que l'URL de callback est accessible publiquement
 - Vérifiez les logs du webhook `/api/webhooks/n8n-callback`
 - Testez l'endpoint manuellement
+
+#### 6. "API send-receipt ne répond pas"
+- Vérifiez que l'endpoint est accessible : `curl http://localhost:3000/api/donations/send-receipt`
+- Vérifiez les logs Next.js pour erreurs
+- Testez avec un transactionId valide
+
+#### 7. "Cache d'idempotence plein"
+- Utilisez `DELETE /api/donations/send-receipt?force=true`
+- Vérifiez la RAM du serveur (cache en mémoire)
+- Considérez Redis en production pour le cache
+
+#### 8. "Transaction non trouvée"
+- Vérifiez que l'UUID transaction existe dans la DB
+- Vérifiez les permissions Supabase RLS
+- Utilisez l'interface de test pour vérifier
 
 ### Logs utiles
 ```bash

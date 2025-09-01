@@ -6,6 +6,7 @@ import { supabase } from '@/shared/lib/supabase';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useReceipts, useReceiptStats } from '@/shared/hooks/useReceipts';
 import { ReceiptService } from '@/shared/lib/receipt-service';
+import ReceiptApiTester from '@/components/admin/ReceiptApiTester';
 
 interface Transaction {
   id: string;
@@ -560,11 +561,17 @@ export default function ReceiptsPage() {
           </div>
         )}
 
+        {/* Test API */}
+        <div className="mt-8">
+          <ReceiptApiTester />
+        </div>
+
         {/* Instructions */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h4 className="font-semibold text-blue-900 mb-2">💡 Instructions - Système n8n + Gotenberg</h4>
           <ul className="text-sm text-blue-800 space-y-1">
             <li>• <strong>Nouveau système :</strong> Les reçus sont générés via n8n + Gotenberg pour un PDF professionnel</li>
+            <li>• <strong>API dédiée :</strong> <code>/api/donations/send-receipt</code> avec idempotence et monitoring</li>
             <li>• <strong>Génération automatique :</strong> Les reçus sont traités en arrière-plan lors des transactions</li>
             <li>• <strong>Statuts :</strong> ⏳ En attente → ✅ Généré/Envoyé → ❌ Échec</li>
             <li>• <strong>Actions :</strong> 📧 Envoyer/Renvoyer le reçu • 🧪 Tester la génération PDF</li>
