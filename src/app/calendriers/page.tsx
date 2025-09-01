@@ -7,6 +7,7 @@ import { useOfflineStore } from '@/shared/stores/offline';
 import { OfflineIndicator } from '@/shared/components/OfflineIndicator';
 import { useTourneeData } from '@/shared/hooks/useTourneeData';
 import { supabase } from '@/shared/lib/supabase';
+import { emailService } from '@/shared/services/emailService';
 
 interface NewTransactionData {
   amount: number;
@@ -143,8 +144,27 @@ export default function CalendriersPage() {
           calendars_given: newDon.calendars_given
         });
 
-        // ✅ Toast succès
-        showSuccessToast('Don enregistré avec succès !');
+        // ✅ Envoi automatique du reçu par email si email fourni
+        if (data && data[0] && newDon.donator_email) {
+          console.log('📧 Envoi reçu email en cours...', { transactionId: data[0].id, email: newDon.donator_email });
+          
+          // Envoi asynchrone pour ne pas bloquer l'UX
+          emailService.processReceiptForTransaction(data[0].id).then(result => {
+            if (result.success) {
+              console.log('✅ Reçu envoyé par email:', result.receiptNumber);
+              showSuccessToast(`Don enregistré ! Reçu envoyé à ${newDon.donator_email}`);
+            } else {
+              console.warn('⚠️ Erreur envoi reçu:', result.error);
+              showSuccessToast('Don enregistré ! (Erreur envoi email)');
+            }
+          }).catch(err => {
+            console.error('❌ Erreur process reçu:', err);
+            showSuccessToast('Don enregistré ! (Erreur envoi email)');
+          });
+        } else {
+          // ✅ Toast succès standard
+          showSuccessToast('Don enregistré avec succès !');
+        }
 
         // ✅ Synchronisation silencieuse en arrière-plan
         setTimeout(() => {
@@ -445,6 +465,31 @@ export default function CalendriersPage() {
                         className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
                         placeholder="M. Dupont"
                       />
+                    </div>
+
+                    {/* Donator Email - Mobile Optimized with Receipt Info */}
+                    <div>
+                      <label className="block text-base font-semibold text-gray-800 mb-3">
+                        Email du donateur (optionnel)
+                        <span className="text-sm font-normal text-blue-600 block mt-1">
+                          📧 Un reçu sera envoyé automatiquement si fourni
+                        </span>
+                      </label>
+                      <input
+                        type="email"
+                        value={newDon.donator_email}
+                        onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
+                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
+                        placeholder="donateur@exemple.com"
+                      />
+                      {newDon.donator_email && (
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <p className="text-sm text-blue-800 flex items-center gap-2">
+                            <span className="text-blue-500">✓</span>
+                            <span>Reçu sera envoyé à <strong>{newDon.donator_email}</strong></span>
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Offline Notice - Mobile Optimized */}
