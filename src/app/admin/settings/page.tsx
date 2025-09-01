@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
 import { toast } from 'react-hot-toast';
-import type { Database } from '@/shared/types/database';
+import type { Database } from '@/types/database.types';
 
 // Utilisation du type depuis la base de données
 type AppSettings = Database['public']['Tables']['settings']['Row'];
@@ -34,7 +34,7 @@ function useAppSettings() {
       // Charger les paramètres depuis la table settings
       const { data, error } = await supabase
         .from('settings')
-        .select('*')
+        .select('id, global_calendars_target, default_team_target, max_calendars_per_transaction, sync_frequency_minutes, notification_emails, primary_color')
         .single();
 
       if (error) {

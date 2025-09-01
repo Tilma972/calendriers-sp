@@ -1,6 +1,6 @@
 // src/shared/lib/supabase.ts - Version Self-Hosted
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/shared/types/database';
+import type { Database } from '@/types/database.types';
 
 // Configuration pour Supabase Self-Hosted
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

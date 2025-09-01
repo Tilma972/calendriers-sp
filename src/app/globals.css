@@ -88,3 +88,28 @@ button:disabled {
 .text-red-700 {
   color: #b91c1c !important;
 }
+
+/* Mobile-First Tap Targets - Minimum 44px for accessibility */
+.tap-target {
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
+
+/* Enhanced touch interactions for mobile */
+@media (hover: none) and (pointer: coarse) {
+  .tap-target {
+    min-height: 48px !important;
+    min-width: 48px !important;
+  }
+  
+  /* Larger touch feedback on mobile */
+  .tap-target:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+}
+
+/* Smooth transitions for all interactive elements */
+.tap-target {
+  transition: all 0.2s ease;
+}

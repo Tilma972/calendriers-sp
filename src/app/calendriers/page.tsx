@@ -1,4 +1,4 @@
-// src/app/calendriers/page.tsx - Version avec UX fluide
+// src/app/calendriers/page.tsx - Mobile-First Version
 'use client';
 
 import { useState } from 'react';
@@ -45,17 +45,37 @@ export default function CalendriersPage() {
 
   // Démarrer nouvelle tournée (avec refresh intelligent)
   const handleStartTournee = async () => {
-    if (!user || !profile?.team_id) return;
+    console.log('🚀 handleStartTournee called!');
+    console.log('User:', user);
+    console.log('Profile:', profile);
+    console.log('IsOnline:', isOnline);
+    console.log('SubmitInProgress:', submitInProgress);
+    
+    if (!user || !profile?.team_id) {
+      console.log('❌ Missing user or team_id, exiting early');
+      console.log('User exists:', !!user);
+      console.log('Profile exists:', !!profile);
+      console.log('Team ID exists:', !!profile?.team_id);
+      return;
+    }
 
     if (!isOnline) {
+      console.log('❌ Not online, showing alert');
       alert('⚠️ Vous devez être connecté pour démarrer une nouvelle tournée.');
       return;
     }
 
+    console.log('✅ All checks passed, prompting for calendar count');
     const calendarsInitial = window.prompt('Nombre de calendriers initial :', '20');
-    if (!calendarsInitial) return;
+    console.log('Calendar count input:', calendarsInitial);
+    
+    if (!calendarsInitial) {
+      console.log('❌ No calendar count provided, exiting');
+      return;
+    }
 
     try {
+      console.log('🔄 Setting submit in progress and calling supabase');
       setSubmitInProgress(true);
 
       const { data, error } = await supabase.rpc('start_new_tournee', {
@@ -63,20 +83,25 @@ export default function CalendriersPage() {
         p_calendars_initial: parseInt(calendarsInitial)
       });
 
+      console.log('Supabase response:', { data, error });
+
       if (error) {
         console.error('Erreur démarrage tournée:', error);
-        alert('Erreur lors du démarrage de la tournée');
+        alert('Erreur lors du démarrage de la tournée: ' + error.message);
         return;
       }
 
       // ✅ Mise à jour fluide sans reload !
+      console.log('🔄 Refreshing tournee data');
       await refreshTourneeData(true);
+      console.log('✅ Tournée started successfully');
       alert('🚀 Tournée démarrée avec succès !');
 
     } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors du démarrage de la tournée');
+      console.error('Erreur catch block:', error);
+      alert('Erreur lors du démarrage de la tournée: ' + (error as Error).message);
     } finally {
+      console.log('🔄 Resetting submit in progress');
       setSubmitInProgress(false);
     }
   };
@@ -197,163 +222,182 @@ export default function CalendriersPage() {
     <div className="min-h-screen bg-gray-50">
       <OfflineIndicator />
 
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <a href="/" className="text-gray-500 hover:text-gray-700">
-                ← Accueil
+      {/* Mobile-First Header */}
+      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="px-4 py-3">
+          <div className="flex flex-col gap-3">
+            {/* Top row - back button and title */}
+            <div className="flex items-center justify-between">
+              <a 
+                href="/" 
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-800 py-2 px-3 -mx-3 rounded-lg tap-target"
+              >
+                <span className="text-lg">←</span>
+                <span className="text-base font-medium">Accueil</span>
               </a>
-              <div className="text-2xl">📅</div>
-              <h1 className="text-xl font-bold text-gray-900">Calendriers 2025</h1>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className={`flex items-center gap-2 px-2 py-1 rounded text-sm ${
+              
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
                 isOnline 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-red-100 text-red-700'
               }`}>
                 <div className={`w-2 h-2 rounded-full ${
                   isOnline ? 'bg-green-500' : 'bg-red-500'
                 }`}></div>
-                {isOnline ? 'En ligne' : 'Hors ligne'}
+                <span className="hidden sm:inline">{isOnline ? 'En ligne' : 'Hors ligne'}</span>
               </div>
+            </div>
+            
+            {/* Title row */}
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">📅</div>
+              <h1 className="text-2xl font-bold text-gray-900">Calendriers 2025</h1>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Pas de tournée active */}
+      <main className="px-4 py-6 pb-8">
+        {/* No Active Tour - Mobile Optimized */}
         {!tourneeActive && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-6">📅</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <div className="text-center py-8">
+            <div className="text-8xl mb-8">📅</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4 px-2">
               Aucune tournée en cours
             </h2>
-            <p className="text-gray-600 mb-8">
+            <p className="text-gray-600 mb-8 text-base leading-relaxed px-2">
               Démarrez une nouvelle tournée pour commencer à enregistrer vos dons
             </p>
             <button
               onClick={handleStartTournee}
               disabled={submitInProgress || !isOnline}
-              className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 mx-auto"
+              className="w-full max-w-sm mx-auto bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg tap-target"
             >
               {submitInProgress && (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              🚀 Démarrer une tournée
+              <span className="text-xl">🚀</span>
+              <span>Démarrer une tournée</span>
             </button>
             {!isOnline && (
-              <p className="text-sm text-orange-600 mt-2">
-                ⚠️ Connexion requise pour démarrer une tournée
-              </p>
+              <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4 mx-auto max-w-sm">
+                <p className="text-sm text-orange-700 font-medium">
+                  ⚠️ Connexion requise pour démarrer une tournée
+                </p>
+              </div>
             )}
           </div>
         )}
 
-        {/* Tournée active */}
+        {/* Active Tour - Mobile Optimized */}
         {tourneeActive && (
           <div className="space-y-6">
-            {/* Stats tournée - avec animations fluides */}
-            <div className="bg-white rounded-xl shadow-lg p-6 transition-all duration-300">
-              <div className="flex justify-between items-start mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  📊 Ma tournée en cours
+            {/* Stats Tour - Mobile-First Layout */}
+            <div className="bg-white rounded-2xl shadow-lg p-5 transition-all duration-300">
+              <div className="text-center mb-6">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                  <span className="text-2xl">📊</span>
+                  <span>Ma tournée en cours</span>
                 </h2>
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
+              {/* Mobile-First Grid - 2 columns on mobile, 4 on larger screens */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-blue-50 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
                     {tourneeActive.calendars_initial}
                   </div>
-                  <div className="text-sm text-gray-600">Initial</div>
+                  <div className="text-sm text-blue-700 font-medium">Initial</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600 transition-all duration-500">
+                <div className="bg-green-50 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-green-600 transition-all duration-500 mb-1">
                     {tourneeActive.calendars_distributed}
                   </div>
-                  <div className="text-sm text-gray-600">Distribués</div>
+                  <div className="text-sm text-green-700 font-medium">Distribués</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-600 transition-all duration-500">
+                <div className="bg-orange-50 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-orange-600 transition-all duration-500 mb-1">
                     {Math.max(0, tourneeActive.calendars_remaining)}
                   </div>
-                  <div className="text-sm text-gray-600">Restants</div>
+                  <div className="text-sm text-orange-700 font-medium">Restants</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600 transition-all duration-500">
+                <div className="bg-red-50 rounded-xl p-4 text-center">
+                  <div className="text-3xl font-bold text-red-600 transition-all duration-500 mb-1">
                     {tourneeActive.total_amount}€
                   </div>
-                  <div className="text-sm text-gray-600">Collecté</div>
+                  <div className="text-sm text-red-700 font-medium">Collecté</div>
                 </div>
               </div>
 
-              {/* Barre de progression animée */}
-              <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+              {/* Progress Bar - Larger for mobile */}
+              <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
                 <div 
-                  className="bg-green-600 h-3 rounded-full transition-all duration-700 ease-out"
+                  className="bg-green-600 h-4 rounded-full transition-all duration-700 ease-out"
                   style={{ 
                     width: `${Math.min(100, (tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}%` 
                   }}
                 ></div>
               </div>
 
-              <div className="flex justify-between text-sm text-gray-600 mb-6">
-                <span>Progression: {Math.round((tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}%</span>
-                <span>{tourneeActive.total_transactions} dons enregistrés</span>
+              <div className="text-center mb-6">
+                <div className="text-lg font-semibold text-gray-800 mb-1">
+                  {Math.round((tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}% de progression
+                </div>
+                <div className="text-sm text-gray-600">
+                  {tourneeActive.total_transactions} don{tourneeActive.total_transactions > 1 ? 's' : ''} enregistré{tourneeActive.total_transactions > 1 ? 's' : ''}
+                </div>
               </div>
 
               <button
                 onClick={() => setShowNewDonForm(true)}
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors text-lg flex items-center justify-center gap-3 tap-target"
               >
-                💰 Enregistrer un nouveau don
+                <span className="text-xl">💰</span>
+                <span>Enregistrer un nouveau don</span>
               </button>
             </div>
 
-            {/* Formulaire modal (identique mais avec les nouveaux handlers) */}
+            {/* Mobile-First Form Modal */}
             {showNewDonForm && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40">
-                <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-bold text-gray-900">
-                      💰 Nouveau Don
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-40">
+                <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      <span className="text-2xl">💰</span>
+                      <span>Nouveau Don</span>
                     </h3>
                     {!isOnline && (
-                      <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">
+                      <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
                         Mode offline
                       </div>
                     )}
                   </div>
                   
-                  <form onSubmit={handleSubmitDon} className="space-y-4">
-                    {/* Formulaire identique... */}
+                  <form onSubmit={handleSubmitDon} className="space-y-6">
+                    {/* Amount Input - Mobile Optimized */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-base font-semibold text-gray-800 mb-3">
                         Montant (€)
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="1"
                         value={newDon.amount}
                         onChange={(e) => setNewDon({ ...newDon, amount: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
                         required
                       />
                     </div>
 
+                    {/* Calendar Count - Mobile Optimized */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-base font-semibold text-gray-800 mb-3">
                         Nombre de calendriers
                       </label>
                       <select
                         value={newDon.calendars_given}
                         onChange={(e) => setNewDon({ ...newDon, calendars_given: parseInt(e.target.value) })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
                       >
                         {[1, 2, 3, 4, 5].map(num => (
                           <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
@@ -361,71 +405,79 @@ export default function CalendriersPage() {
                       </select>
                     </div>
 
+                    {/* Payment Method - Large Tap Targets */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-base font-semibold text-gray-800 mb-3">
                         Mode de paiement
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {(['especes', 'cheque', 'carte'] as const).map(method => (
                           <button
                             key={method}
                             type="button"
                             onClick={() => setNewDon({ ...newDon, payment_method: method })}
-                            className={`py-2 px-3 rounded-md text-sm font-medium transition-colors ${
+                            className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors tap-target flex items-center justify-center gap-2 ${
                               newDon.payment_method === method
-                                ? 'bg-red-600 text-white'
+                                ? 'bg-red-600 text-white shadow-lg'
                                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                           >
-                            {method === 'especes' && '💵'} 
-                            {method === 'cheque' && '📝'} 
-                            {method === 'carte' && '💳'} 
-                            {' '}
-                            {method.charAt(0).toUpperCase() + method.slice(1)}
+                            <span className="text-xl">
+                              {method === 'especes' && '💵'} 
+                              {method === 'cheque' && '📝'} 
+                              {method === 'carte' && '💳'}
+                            </span>
+                            <span>{method.charAt(0).toUpperCase() + method.slice(1)}</span>
                           </button>
                         ))}
                       </div>
                     </div>
 
+                    {/* Donator Name - Mobile Optimized */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-base font-semibold text-gray-800 mb-3">
                         Nom du donateur (optionnel)
                       </label>
                       <input
                         type="text"
                         value={newDon.donator_name}
                         onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
                         placeholder="M. Dupont"
                       />
                     </div>
 
+                    {/* Offline Notice - Mobile Optimized */}
                     {!isOnline && (
-                      <div className="bg-orange-50 border border-orange-200 rounded-md p-3">
+                      <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
                         <div className="text-sm text-orange-800">
-                          <strong>📱 Mode hors-ligne</strong>
-                          <p className="mt-1">Ce don sera sauvegardé localement et synchronisé dès le retour du réseau.</p>
+                          <div className="flex items-center gap-2 font-semibold mb-2">
+                            <span className="text-lg">📱</span>
+                            <span>Mode hors-ligne</span>
+                          </div>
+                          <p>Ce don sera sauvegardé localement et synchronisé dès le retour du réseau.</p>
                         </div>
                       </div>
                     )}
 
-                    <div className="flex gap-3 pt-4">
+                    {/* Action Buttons - Large Tap Targets */}
+                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
                       <button
                         type="button"
                         onClick={() => setShowNewDonForm(false)}
-                        className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
+                        className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-colors text-lg tap-target"
                       >
                         Annuler
                       </button>
                       <button
                         type="submit"
                         disabled={submitInProgress}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg tap-target"
                       >
                         {submitInProgress && (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                         )}
-                        {isOnline ? 'Enregistrer' : 'Sauver offline'}
+                        <span>{isOnline ? 'Enregistrer' : 'Sauver offline'}</span>
                       </button>
                     </div>
                   </form>

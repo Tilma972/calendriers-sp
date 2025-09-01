@@ -44,55 +44,90 @@ function useAdminTransactions() {
     try {
       setIsLoading(true);
 
-      const { data, error } = await supabase
+      // 1. Charger les transactions sans jointures
+      const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select(`
-          id,
-          user_id,
-          team_id,
-          tournee_id,
-          amount,
-          calendars_given,
-          payment_method,
-          donator_name,
-          donator_email,
-          status,
-          receipt_number,
-          notes,
-          created_at,
-          validated_team_at,
-          validated_tresorier_at,
-          profiles!transactions_user_id_fkey(full_name),
-          teams!transactions_team_id_fkey(name, color)
-        `)
+        id,
+        user_id,
+        team_id,
+        tournee_id,
+        amount,
+        calendars_given,
+        payment_method,
+        donator_name,
+        donator_email,
+        status,
+        receipt_number,
+        notes,
+        created_at,
+        validated_team_at,
+        validated_tresorier_at
+      `)
         .order('created_at', { ascending: false })
-        .limit(200); // Limiter pour la performance
+        .limit(200);
 
-      if (error) throw error;
+      if (transactionsError) throw transactionsError;
 
-      if (data) {
-        const formattedTransactions: Transaction[] = data.map(t => ({
-          id: t.id,
-          user_id: t.user_id,
-          team_id: t.team_id,
-          tournee_id: t.tournee_id,
-          amount: t.amount,
-          calendars_given: t.calendars_given,
-          payment_method: t.payment_method,
-          donator_name: t.donator_name,
-          donator_email: t.donator_email,
-          status: t.status,
-          receipt_number: t.receipt_number,
-          notes: t.notes,
-          created_at: t.created_at,
-          validated_team_at: t.validated_team_at,
-          validated_tresorier_at: t.validated_tresorier_at,
-          user_name: t.profiles?.full_name || null,
-          team_name: t.teams?.name || null,
-          team_color: t.teams?.color || null,
-        }));
-        setTransactions(formattedTransactions);
+      if (!transactionsData) {
+        setTransactions([]);
+        return;
       }
+
+      // 2. Extraire les IDs uniques pour les jointures
+      const userIds = [...new Set(transactionsData.map(t => t.user_id).filter(Boolean))];
+      const teamIds = [...new Set(transactionsData.map(t => t.team_id).filter(Boolean))];
+
+      // 3. Charger les données liées en parallèle (plus performant)
+      const [profilesResult, teamsResult] = await Promise.all([
+        userIds.length > 0
+          ? supabase.from('profiles').select('id, full_name').in('id', userIds.filter(Boolean) as string[])
+          : { data: [], error: null },
+        teamIds.length > 0
+          ? supabase.from('teams').select('id, name, color').in('id', teamIds)
+          : { data: [], error: null }
+      ]);
+
+      // 4. Vérifier les erreurs des requêtes parallèles
+      if (profilesResult.error) {
+        console.warn('Erreur chargement profiles:', profilesResult.error);
+      }
+      if (teamsResult.error) {
+        console.warn('Erreur chargement teams:', teamsResult.error);
+      }
+
+      // 5. Créer des maps pour jointures rapides
+      const profilesMap = Object.fromEntries(
+        (profilesResult.data || []).map(profile => [profile.id, profile.full_name])
+      );
+      const teamsMap = Object.fromEntries(
+        (teamsResult.data || []).map(team => [team.id, { name: team.name, color: team.color }])
+      );
+
+      // 6. Enrichir les transactions avec les données jointes
+      const enrichedTransactions: Transaction[] = transactionsData.map(transaction => ({
+        id: transaction.id,
+        user_id: transaction.user_id,
+        team_id: transaction.team_id,
+        tournee_id: transaction.tournee_id,
+        amount: transaction.amount,
+        calendars_given: transaction.calendars_given,
+        payment_method: transaction.payment_method,
+        donator_name: transaction.donator_name,
+        donator_email: transaction.donator_email,
+        status: transaction.status,
+        receipt_number: transaction.receipt_number,
+        notes: transaction.notes,
+        created_at: transaction.created_at,
+        validated_team_at: transaction.validated_team_at,
+        validated_tresorier_at: transaction.validated_tresorier_at,
+        // Données enrichies via jointures manuelles
+        user_name: profilesMap[transaction.user_id] || null,
+        team_name: transaction.team_id ? teamsMap[transaction.team_id]?.name || null : null,
+        team_color: transaction.team_id ? teamsMap[transaction.team_id]?.color || null : null,
+      }));
+
+      setTransactions(enrichedTransactions);
 
     } catch (error: any) {
       console.error('Erreur chargement transactions:', error);
@@ -108,16 +143,16 @@ function useAdminTransactions() {
     if (!originalTransaction) return;
 
     const newStatus = action === 'validate' ? 'validated_tresorier' : 'cancelled';
-    
+
     // Mise à jour optimiste
     setTransactions(prev =>
       prev.map(t =>
         t.id === transactionId
-          ? { 
-              ...t, 
-              status: newStatus as any,
-              validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null
-            }
+          ? {
+            ...t,
+            status: newStatus as any,
+            validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null
+          }
           : t
       )
     );
@@ -138,7 +173,7 @@ function useAdminTransactions() {
       if (error) throw error;
 
       toast.success(`Transaction ${action === 'validate' ? 'validée' : 'rejetée'}`, { id: `validate-${transactionId}` });
-      
+
       // Retirer de la sélection
       setSelectedTransactions(prev => prev.filter(id => id !== transactionId));
 
@@ -149,7 +184,7 @@ function useAdminTransactions() {
           t.id === transactionId ? originalTransaction : t
         )
       );
-      
+
       console.error('Erreur validation:', error);
       toast.error(`Erreur: ${error.message}`, { id: `validate-${transactionId}` });
     }
@@ -161,17 +196,17 @@ function useAdminTransactions() {
 
     const originalTransactions = transactions.filter(t => transactionIds.includes(t.id));
     const newStatus = action === 'validate' ? 'validated_tresorier' : 'cancelled';
-    
+
     // Mise à jour optimiste
     setTransactions(prev =>
       prev.map(t =>
         transactionIds.includes(t.id)
-          ? { 
-              ...t, 
-              status: newStatus as any,
-              validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
-              notes: note ? `${t.notes || ''}${t.notes ? '\n' : ''}Admin: ${note}` : t.notes
-            }
+          ? {
+            ...t,
+            status: newStatus as any,
+            validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
+            notes: note ? `${t.notes || ''}${t.notes ? '\n' : ''}Admin: ${note}` : t.notes
+          }
           : t
       )
     );
@@ -183,8 +218,8 @@ function useAdminTransactions() {
       // Approche plus sûre : mise à jour une par une pour éviter les problèmes SQL
       const updatePromises = transactionIds.map(transactionId => {
         const originalTransaction = originalTransactions.find(t => t.id === transactionId);
-        const updatedNotes = note ? 
-          `${originalTransaction?.notes || ''}${originalTransaction?.notes ? '\n' : ''}Admin: ${note}` : 
+        const updatedNotes = note ?
+          `${originalTransaction?.notes || ''}${originalTransaction?.notes ? '\n' : ''}Admin: ${note}` :
           originalTransaction?.notes;
 
         return supabase
@@ -198,7 +233,7 @@ function useAdminTransactions() {
       });
 
       const results = await Promise.all(updatePromises);
-      
+
       // Vérifier les erreurs
       const errors = results.filter(result => result.error);
       if (errors.length > 0) {
@@ -216,34 +251,34 @@ function useAdminTransactions() {
           return original || t;
         })
       );
-      
+
       console.error('Erreur validation bulk:', error);
       toast.error(`Erreur: ${error.message}`, { id: 'validate-bulk' });
     }
   };
 
-  return { 
-    transactions, 
-    isLoading, 
-    selectedTransactions, 
+  return {
+    transactions,
+    isLoading,
+    selectedTransactions,
     setSelectedTransactions,
-    loadData, 
+    loadData,
     validateTransaction,
     validateBulk
   };
 }
 
 export default function AdminTransactionsPage() {
-  const { 
-    transactions, 
-    isLoading, 
-    selectedTransactions, 
+  const {
+    transactions,
+    isLoading,
+    selectedTransactions,
     setSelectedTransactions,
-    loadData, 
+    loadData,
     validateTransaction,
     validateBulk
   } = useAdminTransactions();
-  
+
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [userFilter, setUserFilter] = useState<string>('all');
@@ -262,12 +297,12 @@ export default function AdminTransactionsPage() {
     const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
     const matchesTeam = teamFilter === 'all' || transaction.team_id === teamFilter;
     const matchesUser = userFilter === 'all' || transaction.user_id === userFilter;
-    
+
     // Filtre par période
     const transactionDate = new Date(transaction.created_at);
     const now = new Date();
     let matchesDate = true;
-    
+
     if (dateFilter === 'today') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -279,12 +314,12 @@ export default function AdminTransactionsPage() {
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       matchesDate = transactionDate >= monthAgo;
     }
-    
-    const matchesSearch = 
+
+    const matchesSearch =
       transaction.user_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transaction.donator_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transaction.receipt_number?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     return matchesStatus && matchesTeam && matchesUser && matchesDate && matchesSearch;
   });
 
@@ -315,10 +350,10 @@ export default function AdminTransactionsPage() {
 
   // Gestion sélection
   const handleSelectAll = () => {
-    const selectableTransactions = filteredTransactions.filter(t => 
+    const selectableTransactions = filteredTransactions.filter(t =>
       t.status === 'pending' || t.status === 'validated_team'
     );
-    
+
     if (selectedTransactions.length === selectableTransactions.length) {
       setSelectedTransactions([]);
     } else {
@@ -360,7 +395,7 @@ export default function AdminTransactionsPage() {
                 <div className="text-2xl">💳</div>
                 <h1 className="text-xl font-bold text-gray-900">Validation Transactions</h1>
               </div>
-              
+
               <div className="flex gap-2">
                 {selectedTransactions.length > 0 && (
                   <>
@@ -427,7 +462,7 @@ export default function AdminTransactionsPage() {
                   <option value="cancelled">Annulées</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Équipe</label>
                 <select
@@ -443,7 +478,7 @@ export default function AdminTransactionsPage() {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Sapeur</label>
                 <select
@@ -459,7 +494,7 @@ export default function AdminTransactionsPage() {
                   ))}
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Période</label>
                 <select
@@ -473,7 +508,7 @@ export default function AdminTransactionsPage() {
                   <option value="month">30 derniers jours</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Recherche</label>
                 <input
@@ -485,7 +520,7 @@ export default function AdminTransactionsPage() {
                 />
               </div>
             </div>
-            
+
             {/* Boutons de remise à zéro et stats */}
             <div className="flex justify-between items-center pt-4 border-t">
               <button
@@ -500,7 +535,7 @@ export default function AdminTransactionsPage() {
               >
                 Réinitialiser les filtres
               </button>
-              
+
               <div className="text-sm text-gray-600">
                 {filteredTransactions.length} transaction(s) affichée(s) sur {transactions.length} • {selectedTransactions.length} sélectionnée(s)
               </div>
@@ -516,9 +551,9 @@ export default function AdminTransactionsPage() {
                     <th className="px-4 py-3 text-left">
                       <input
                         type="checkbox"
-                        checked={selectedTransactions.length === filteredTransactions.filter(t => 
+                        checked={selectedTransactions.length === filteredTransactions.filter(t =>
                           t.status === 'pending' || t.status === 'validated_team'
-                        ).length && filteredTransactions.filter(t => 
+                        ).length && filteredTransactions.filter(t =>
                           t.status === 'pending' || t.status === 'validated_team'
                         ).length > 0}
                         onChange={handleSelectAll}
@@ -564,7 +599,7 @@ export default function AdminTransactionsPage() {
                           />
                         )}
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
                           <div className="text-sm font-medium text-gray-900">
@@ -585,11 +620,11 @@ export default function AdminTransactionsPage() {
                           )}
                         </div>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {transaction.team_color && (
-                            <div 
+                            <div
                               className="w-3 h-3 rounded-full"
                               style={{ backgroundColor: transaction.team_color }}
                             />
@@ -604,7 +639,7 @@ export default function AdminTransactionsPage() {
                           </div>
                         </div>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-bold text-gray-900">
                           {transaction.amount.toFixed(2)}€
@@ -613,33 +648,31 @@ export default function AdminTransactionsPage() {
                           {transaction.calendars_given} calendrier(s)
                         </div>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          transaction.payment_method === 'carte' ? 'bg-blue-100 text-blue-800' :
-                          transaction.payment_method === 'cheque' ? 'bg-yellow-100 text-yellow-800' :
-                          transaction.payment_method === 'especes' ? 'bg-green-100 text-green-800' :
-                          'bg-purple-100 text-purple-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs rounded-full ${transaction.payment_method === 'carte' ? 'bg-blue-100 text-blue-800' :
+                            transaction.payment_method === 'cheque' ? 'bg-yellow-100 text-yellow-800' :
+                              transaction.payment_method === 'especes' ? 'bg-green-100 text-green-800' :
+                                'bg-purple-100 text-purple-800'
+                          }`}>
                           {transaction.payment_method === 'especes' ? 'Espèces' :
-                           transaction.payment_method === 'cheque' ? 'Chèque' :
-                           transaction.payment_method === 'carte' ? 'Carte' : 'Virement'}
+                            transaction.payment_method === 'cheque' ? 'Chèque' :
+                              transaction.payment_method === 'carte' ? 'Carte' : 'Virement'}
                         </span>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          transaction.status === 'pending' ? 'bg-orange-100 text-orange-800' :
-                          transaction.status === 'validated_team' ? 'bg-blue-100 text-blue-800' :
-                          transaction.status === 'validated_tresorier' ? 'bg-green-100 text-green-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
+                        <span className={`px-2 py-1 text-xs rounded-full ${transaction.status === 'pending' ? 'bg-orange-100 text-orange-800' :
+                            transaction.status === 'validated_team' ? 'bg-blue-100 text-blue-800' :
+                              transaction.status === 'validated_tresorier' ? 'bg-green-100 text-green-800' :
+                                'bg-red-100 text-red-800'
+                          }`}>
                           {transaction.status === 'pending' ? 'En attente' :
-                           transaction.status === 'validated_team' ? 'Valid. équipe' :
-                           transaction.status === 'validated_tresorier' ? 'Validé final' : 'Annulé'}
+                            transaction.status === 'validated_team' ? 'Valid. équipe' :
+                              transaction.status === 'validated_tresorier' ? 'Validé final' : 'Annulé'}
                         </span>
                       </td>
-                      
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex gap-1">
                           <button
@@ -648,7 +681,7 @@ export default function AdminTransactionsPage() {
                           >
                             👁️
                           </button>
-                          
+
                           {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
                             <>
                               <button
@@ -689,7 +722,7 @@ export default function AdminTransactionsPage() {
                 <h3 className="text-lg font-bold text-gray-900 mb-4">
                   {showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'} {selectedTransactions.length} transaction(s)
                 </h3>
-                
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Note (optionnelle)
@@ -719,11 +752,10 @@ export default function AdminTransactionsPage() {
                       setShowBulkModal(null);
                       setBulkNote('');
                     }}
-                    className={`flex-1 font-medium py-2 px-4 rounded-md transition-colors ${
-                      showBulkModal.action === 'validate' 
+                    className={`flex-1 font-medium py-2 px-4 rounded-md transition-colors ${showBulkModal.action === 'validate'
                         ? 'bg-green-600 hover:bg-green-700 text-white'
                         : 'bg-red-600 hover:bg-red-700 text-white'
-                    }`}
+                      }`}
                   >
                     {showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'}
                   </button>
@@ -736,14 +768,14 @@ export default function AdminTransactionsPage() {
           {showDetailModal && (() => {
             const transaction = transactions.find(t => t.id === showDetailModal);
             if (!transaction) return null;
-            
+
             return (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                 <div className="bg-white rounded-xl p-6 w-full max-w-lg">
                   <h3 className="text-lg font-bold text-gray-900 mb-4">
                     Détails Transaction
                   </h3>
-                  
+
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -755,17 +787,17 @@ export default function AdminTransactionsPage() {
                         <div className="font-bold text-lg">{transaction.calendars_given}</div>
                       </div>
                     </div>
-                    
+
                     <div>
                       <span className="text-sm text-gray-500">Sapeur</span>
                       <div className="font-medium">{transaction.user_name}</div>
                     </div>
-                    
+
                     <div>
                       <span className="text-sm text-gray-500">Équipe</span>
                       <div className="font-medium flex items-center gap-2">
                         {transaction.team_color && (
-                          <div 
+                          <div
                             className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: transaction.team_color }}
                           />
@@ -773,7 +805,7 @@ export default function AdminTransactionsPage() {
                         {transaction.team_name || 'Aucune équipe'}
                       </div>
                     </div>
-                    
+
                     {transaction.donator_name && (
                       <div>
                         <span className="text-sm text-gray-500">Donateur</span>
@@ -783,23 +815,23 @@ export default function AdminTransactionsPage() {
                         )}
                       </div>
                     )}
-                    
+
                     <div>
                       <span className="text-sm text-gray-500">Mode de paiement</span>
                       <div className="font-medium capitalize">
                         {transaction.payment_method === 'especes' ? 'Espèces' :
-                         transaction.payment_method === 'cheque' ? 'Chèque' :
-                         transaction.payment_method === 'carte' ? 'Carte bancaire' : 'Virement'}
+                          transaction.payment_method === 'cheque' ? 'Chèque' :
+                            transaction.payment_method === 'carte' ? 'Carte bancaire' : 'Virement'}
                       </div>
                     </div>
-                    
+
                     <div>
                       <span className="text-sm text-gray-500">Date de création</span>
                       <div className="font-medium">
                         {new Date(transaction.created_at).toLocaleString('fr-FR')}
                       </div>
                     </div>
-                    
+
                     {transaction.validated_team_at && (
                       <div>
                         <span className="text-sm text-gray-500">Validée équipe le</span>
@@ -808,7 +840,7 @@ export default function AdminTransactionsPage() {
                         </div>
                       </div>
                     )}
-                    
+
                     {transaction.validated_tresorier_at && (
                       <div>
                         <span className="text-sm text-gray-500">Validée trésorier le</span>
@@ -817,7 +849,7 @@ export default function AdminTransactionsPage() {
                         </div>
                       </div>
                     )}
-                    
+
                     {transaction.notes && (
                       <div>
                         <span className="text-sm text-gray-500">Notes</span>
@@ -837,7 +869,7 @@ export default function AdminTransactionsPage() {
                     >
                       Fermer
                     </button>
-                    
+
                     {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
                       <>
                         <button

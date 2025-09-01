@@ -117,54 +117,83 @@ function useAdminReports() {
   };
 
   const exportTransactions = async (filters: ExportFilters, format: 'csv' | 'excel') => {
-    try {
-      setIsExporting(true);
-      toast.loading('Génération de l\'export...', { id: 'export' });
+  try {
+    setIsExporting(true);
+    toast.loading('Génération de l\'export...', { id: 'export' });
 
-      // Construire la requête avec jointures pour avoir tous les détails
-      let query = supabase
-        .from('transactions')
-        .select(`
-          *,
-          profiles!transactions_user_id_fkey(full_name, email),
-          teams!transactions_team_id_fkey(name, color)
-        `);
+    // 1. Construire la requête SANS jointures
+    let query = supabase.from('transactions').select('*');
 
-      // Appliquer les filtres
-      if (filters.dateFrom) {
-        query = query.gte('created_at', `${filters.dateFrom}T00:00:00`);
-      }
-      if (filters.dateTo) {
-        query = query.lte('created_at', `${filters.dateTo}T23:59:59`);
-      }
-      if (filters.status !== 'all') {
-        query = query.eq('status', filters.status as 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled');
-      }
-      if (filters.team_id !== 'all') {
-        query = query.eq('team_id', filters.team_id);
-      }
-      if (filters.payment_method !== 'all') {
-        query = query.eq('payment_method', filters.payment_method as 'especes' | 'cheque' | 'carte' | 'virement');
-      }
+    // Appliquer les filtres
+    if (filters.dateFrom) {
+      query = query.gte('created_at', `${filters.dateFrom}T00:00:00`);
+    }
+    if (filters.dateTo) {
+      query = query.lte('created_at', `${filters.dateTo}T23:59:59`);
+    }
+    if (filters.status !== 'all') {
+      query = query.eq('status', filters.status as 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled');
+    }
+    if (filters.team_id !== 'all') {
+      query = query.eq('team_id', filters.team_id);
+    }
+    if (filters.payment_method !== 'all') {
+      query = query.eq('payment_method', filters.payment_method as 'especes' | 'cheque' | 'carte' | 'virement');
+    }
 
-      query = query.order('created_at', { ascending: false });
+    query = query.order('created_at', { ascending: false });
 
-      const { data, error } = await query;
-      if (error) throw error;
+    // 2. Exécuter la requête principale
+    const { data, error } = await query;
+    if (error) throw error;
 
-      if (!data || data.length === 0) {
-        toast.error('Aucune donnée à exporter', { id: 'export' });
-        return;
-      }
+    if (!data || data.length === 0) {
+      toast.error('Aucune donnée à exporter', { id: 'export' });
+      return;
+    }
 
-      // Préparer les données pour l'export
-      const exportData = data.map(transaction => ({
+    // 3. Extraire les IDs pour les jointures (avec filtrage des null)
+    const userIds = [...new Set(data.map(t => t.user_id).filter(Boolean))];
+    const teamIds = [...new Set(data.map(t => t.team_id).filter(Boolean))];
+
+    // 4. Charger les données liées en parallèle
+    const [profilesRes, teamsRes] = await Promise.all([
+      userIds.length > 0 
+        ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+        : { data: [], error: null },
+      teamIds.length > 0 
+        ? supabase.from('teams').select('id, name, color').in('id', teamIds)
+        : { data: [], error: null }
+    ]);
+
+    // 5. Vérifier les erreurs des requêtes parallèles
+    if (profilesRes.error) {
+      console.warn('Erreur chargement profiles:', profilesRes.error);
+    }
+    if (teamsRes.error) {
+      console.warn('Erreur chargement teams:', teamsRes.error);
+    }
+
+    // 6. Créer des maps pour lookup rapide
+    const profilesMap = Object.fromEntries(
+      (profilesRes.data || []).map(profile => [profile.id, profile])
+    );
+    const teamsMap = Object.fromEntries(
+      (teamsRes.data || []).map(team => [team.id, team])
+    );
+
+    // 7. Préparer les données pour l'export avec jointures manuelles
+    const exportData = data.map(transaction => {
+      const profile = profilesMap[transaction.user_id];
+      const team = teamsMap[transaction.team_id];
+      
+      return {
         'Numéro': transaction.receipt_number || transaction.id.slice(-8),
         'Date': new Date(transaction.created_at).toLocaleDateString('fr-FR'),
         'Heure': new Date(transaction.created_at).toLocaleTimeString('fr-FR'),
-        'Sapeur': transaction.profiles?.full_name || '',
-        'Email Sapeur': transaction.profiles?.email || '',
-        'Équipe': transaction.teams?.name || '',
+        'Sapeur': profile?.full_name || '',
+        'Email Sapeur': profile?.email || '',
+        'Équipe': team?.name || '',
         'Montant (€)': transaction.amount,
         'Calendriers': transaction.calendars_given,
         'Mode Paiement': transaction.payment_method,
@@ -176,25 +205,25 @@ function useAdminReports() {
         'Validé Trésorier': transaction.validated_tresorier_at ? 
           new Date(transaction.validated_tresorier_at).toLocaleDateString('fr-FR') : '',
         'Notes': transaction.notes || ''
-      }));
+      };
+    });
 
-      if (format === 'csv') {
-        downloadCSV(exportData, 'transactions');
-      } else {
-        // Pour Excel, on utiliserait une librairie comme xlsx
-        // Pour l'instant, on fait du CSV étiqueté comme Excel
-        downloadCSV(exportData, 'transactions', true);
-      }
-
-      toast.success(`${data.length} transactions exportées`, { id: 'export' });
-
-    } catch (error: any) {
-      console.error('Erreur export:', error);
-      toast.error(`Erreur: ${error.message}`, { id: 'export' });
-    } finally {
-      setIsExporting(false);
+    // 8. Télécharger selon le format
+    if (format === 'csv') {
+      downloadCSV(exportData, 'transactions');
+    } else {
+      downloadCSV(exportData, 'transactions', true);
     }
-  };
+
+    toast.success(`${data.length} transactions exportées`, { id: 'export' });
+
+  } catch (error: any) {
+    console.error('Erreur export:', error);
+    toast.error(`Erreur: ${error.message}`, { id: 'export' });
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   const exportTeamPerformance = async (filters: ExportFilters) => {
     try {
