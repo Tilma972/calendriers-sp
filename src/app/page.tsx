@@ -226,7 +226,7 @@ export default function HomePage() {
                 style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
               >
                 <div className="flex items-center gap-4">
-                  <div className="text-2xl font-bold text-gray-400">
+                  <div className="text-2xl font-bold text-gray-600">
                     #{index + 1}
                   </div>
                   <div>

@@ -759,7 +759,7 @@ export type Database = {
       }
     }
     Enums: {
-      payment_method_enum: "especes" | "cheque" | "carte" | "virement"
+      payment_method_enum: "especes" | "cheque" | "carte" | "virement" | "especes_batch"
       role_enum: "sapeur" | "chef_equipe" | "tresorier"
       tournee_status_enum:
         | "en_cours"

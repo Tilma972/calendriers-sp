@@ -3,8 +3,8 @@
 
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/shared/stores/auth';
-import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
+import Link from 'next/link';
 
 interface AdminStats {
   users_total: number;
@@ -36,6 +36,8 @@ export default function AdminDashboard() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [pendingUsers, setPendingUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
 
   useEffect(() => {
     loadAdminData();
@@ -160,106 +162,22 @@ export default function AdminDashboard() {
 
     if (isLoading) {
       return (
-        <AdminGuard>
-          <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Chargement du dashboard...</p>
-            </div>
+        <div className="flex items-center justify-center min-h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Chargement du dashboard...</p>
           </div>
-        </AdminGuard>
+        </div>
       );
     }
 
     return (
-      <AdminGuard>
-        <div className="min-h-screen bg-gray-50">
-          {/* Header Admin */}
-          <header className="bg-white shadow-sm border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-16">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">⚙️</div>
-                  <h1 className="text-xl font-bold text-gray-900">Administration</h1>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-gray-900">
-                      {profile?.full_name}
-                    </div>
-                    <div className="text-xs text-gray-500">Trésorier</div>
-                  </div>
-
-                  {/* ✨ NOUVEAU : Bouton déconnexion au lieu de "Retour App" */}
-                  <button
-                    onClick={() => {
-                      console.log('🚪 Déconnexion depuis admin');
-                      signOut();
-                    }}
-                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm transition-colors"
-                  >
-                    Déconnexion
-                  </button>
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            {/* Navigation Admin */}
-            <nav className="mb-8">
-              <div className="flex space-x-1 bg-white p-1 rounded-lg shadow">
-                <a
-                  href="/admin"
-                  className="bg-red-100 text-red-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Dashboard
-                </a>
-                <a
-                  href="/admin/users"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Utilisateurs
-                </a>
-                <a
-                  href="/admin/teams"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Équipes
-                </a>
-                <a
-                  href="/admin/transactions"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Transactions
-                </a>
-                <a
-                  href="/admin/settings"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Paramètres
-                </a>
-                <a
-                  href="/admin/receipts"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  📧 Reçus
-                </a>
-                <a
-                  href="/admin/email-stats"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  📈 Stats Emails
-                </a>
-                <a
-                  href="/admin/pending"
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Demandes ({pendingUsers.length})
-                </a>
-              </div>
-            </nav>
+      <div className="space-y-6">
+        {/* Header simple */}
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+          <p className="text-gray-600">Vue d'ensemble de l'administration</p>
+        </div>
 
             {/* Stats Grid */}
             {stats && (
@@ -275,7 +193,7 @@ export default function AdminDashboard() {
                       <span className="text-2xl text-blue-600">👥</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-700">
                     {stats.users_sapeurs} sapeurs • {stats.users_chefs} chefs • {stats.users_tresoriers} trésoriers
                   </div>
                 </div>
@@ -291,7 +209,7 @@ export default function AdminDashboard() {
                       <span className="text-2xl text-green-600">🏆</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-700">
                     {stats.teams_active} avec chef • {stats.teams_without_chef} sans chef
                   </div>
                 </div>
@@ -307,7 +225,7 @@ export default function AdminDashboard() {
                       <span className="text-2xl text-yellow-600">💰</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-700">
                     {stats.amount_today.toFixed(2)}€ collectés
                   </div>
                 </div>
@@ -323,7 +241,7 @@ export default function AdminDashboard() {
                       <span className="text-2xl text-red-600">⚠️</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-gray-700">
                     Validations requises
                   </div>
                 </div>
@@ -336,30 +254,30 @@ export default function AdminDashboard() {
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions Rapides</h3>
                 <div className="space-y-3">
-                  <a
-                    href="/admin/users/new"
-                    className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                  <button
+                    onClick={() => setShowCreateUserModal(true)}
+                    className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors w-full text-left"
                   >
                     <span className="text-xl">➕</span>
                     <div>
                       <div className="font-medium">Créer un Utilisateur</div>
-                      <div className="text-sm text-gray-500">Ajouter un nouveau sapeur ou chef</div>
+                      <div className="text-sm text-gray-700">Ajouter un nouveau sapeur ou chef</div>
                     </div>
-                  </a>
+                  </button>
 
-                  <a
-                    href="/admin/teams/new"
-                    className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                  <button
+                    onClick={() => setShowCreateTeamModal(true)}
+                    className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors w-full text-left"
                   >
                     <span className="text-xl">🏆</span>
                     <div>
                       <div className="font-medium">Créer une Équipe</div>
-                      <div className="text-sm text-gray-500">Configurer une nouvelle équipe</div>
+                      <div className="text-sm text-gray-700">Configurer une nouvelle équipe</div>
                     </div>
-                  </a>
+                  </button>
 
                   {stats?.transactions_pending && stats.transactions_pending > 0 && (
-                    <a
+                    <Link
                       href="/admin/transactions"
                       className="flex items-center gap-3 p-3 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
                     >
@@ -368,7 +286,7 @@ export default function AdminDashboard() {
                         <div className="font-medium text-red-700">Valider Transactions</div>
                         <div className="text-sm text-red-600">{stats.transactions_pending} en attente</div>
                       </div>
-                    </a>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -387,14 +305,14 @@ export default function AdminDashboard() {
                         </span>
                         <div className="flex-1">
                           <div className="font-medium">{activity.description}</div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-600">
                             {activity.user_name} • {new Date(activity.timestamp).toLocaleString()}
                           </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center text-gray-500 py-4">
+                    <div className="text-center text-gray-600 py-4">
                       Aucune activité récente
                     </div>
                   )}
@@ -417,12 +335,12 @@ export default function AdminDashboard() {
                         Assignez des chefs d'équipe pour optimiser la gestion
                       </div>
                     </div>
-                    <a
+                    <Link
                       href="/admin/teams"
                       className="ml-auto bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-sm transition-colors"
                     >
                       Corriger
-                    </a>
+                    </Link>
                   </div>
                 )}
 
@@ -447,8 +365,62 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
-          </main>
-        </div>
-      </AdminGuard>
+
+            {/* Modal Créer Utilisateur */}
+            {showCreateUserModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                  <h3 className="text-lg font-semibold mb-4">Créer un Utilisateur</h3>
+                  <p className="text-gray-600 mb-4">
+                    Cette fonctionnalité sera bientôt disponible. 
+                    En attendant, utilisez la section <strong>Utilisateurs</strong> du menu.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowCreateUserModal(false)}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                    >
+                      Fermer
+                    </button>
+                    <Link
+                      href="/admin/users"
+                      onClick={() => setShowCreateUserModal(false)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    >
+                      Voir les Utilisateurs
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Créer Équipe */}
+            {showCreateTeamModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                  <h3 className="text-lg font-semibold mb-4">Créer une Équipe</h3>
+                  <p className="text-gray-600 mb-4">
+                    Cette fonctionnalité sera bientôt disponible. 
+                    En attendant, utilisez la section <strong>Équipes</strong> du menu.
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowCreateTeamModal(false)}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                    >
+                      Fermer
+                    </button>
+                    <Link
+                      href="/admin/teams"
+                      onClick={() => setShowCreateTeamModal(false)}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+                    >
+                      Voir les Équipes
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+      </div>
     );
   }
