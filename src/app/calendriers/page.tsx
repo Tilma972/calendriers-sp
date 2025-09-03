@@ -1,4 +1,4 @@
-// src/app/calendriers/page.tsx - Mobile-First Version
+// src/app/calendriers/page.tsx - Interface refactorisée avec clôture de tournée
 'use client';
 
 import { useState } from 'react';
@@ -7,16 +7,9 @@ import { useOfflineStore } from '@/shared/stores/offline';
 import { OfflineIndicator } from '@/shared/components/OfflineIndicator';
 import { useTourneeData } from '@/shared/hooks/useTourneeData';
 import { supabase } from '@/shared/lib/supabase';
-import { emailService } from '@/shared/services/emailService';
+import ClotureModal from '@/components/ClotureModal';
+import ExistingDonForm from '@/components/ExistingDonForm';
 
-interface NewTransactionData {
-  amount: number;
-  calendars_given: number;
-  payment_method: 'especes' | 'cheque' | 'carte';
-  donator_name?: string;
-  donator_email?: string;
-  notes?: string;
-}
 
 export default function CalendriersPage() {
   const { profile, user } = useAuthStore();
@@ -31,18 +24,9 @@ export default function CalendriersPage() {
     refreshTourneeData
   } = useTourneeData(user?.id);
   
-  const [showNewDonForm, setShowNewDonForm] = useState(false);
+  const [showClotureForm, setShowClotureForm] = useState(false);
+  const [showExistingDonForm, setShowExistingDonForm] = useState(false);
   const [submitInProgress, setSubmitInProgress] = useState(false);
-  
-  // Form state
-  const [newDon, setNewDon] = useState<NewTransactionData>({
-    amount: 10,
-    calendars_given: 1,
-    payment_method: 'especes',
-    donator_name: '',
-    donator_email: '',
-    notes: '',
-  });
 
   // Démarrer nouvelle tournée (avec refresh intelligent)
   const handleStartTournee = async () => {
@@ -107,125 +91,6 @@ export default function CalendriersPage() {
     }
   };
 
-  // Enregistrer nouveau don (UX optimiste + fluide)
-  const handleSubmitDon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!user || !profile?.team_id || !tourneeActive) return;
-
-    setSubmitInProgress(true);
-
-    try {
-      if (isOnline) {
-        // Mode online : enregistrer directement
-        const { data, error } = await supabase
-          .from('transactions')
-          .insert({
-            user_id: user.id,
-            team_id: profile.team_id,
-            tournee_id: tourneeActive.tournee_id,
-            amount: newDon.amount,
-            calendars_given: newDon.calendars_given,
-            payment_method: newDon.payment_method,
-            donator_name: newDon.donator_name || null,
-            donator_email: newDon.donator_email || null,
-            notes: newDon.notes || null,
-            status: 'pending'
-          });
-
-        if (error) {
-          console.error('Erreur enregistrement don:', error);
-          throw error;
-        }
-
-        // ✅ Mise à jour optimiste instantanée
-        updateTourneeOptimistic({
-          amount: newDon.amount,
-          calendars_given: newDon.calendars_given
-        });
-
-        // ✅ Envoi automatique du reçu par email si email fourni
-        if (data && data[0] && newDon.donator_email) {
-          console.log('📧 Envoi reçu email en cours...', { transactionId: data[0].id, email: newDon.donator_email });
-          
-          // Envoi asynchrone pour ne pas bloquer l'UX
-          emailService.processReceiptForTransaction(data[0].id).then(result => {
-            if (result.success) {
-              console.log('✅ Reçu envoyé par email:', result.receiptNumber);
-              showSuccessToast(`Don enregistré ! Reçu envoyé à ${newDon.donator_email}`);
-            } else {
-              console.warn('⚠️ Erreur envoi reçu:', result.error);
-              showSuccessToast('Don enregistré ! (Erreur envoi email)');
-            }
-          }).catch(err => {
-            console.error('❌ Erreur process reçu:', err);
-            showSuccessToast('Don enregistré ! (Erreur envoi email)');
-          });
-        } else {
-          // ✅ Toast succès standard
-          showSuccessToast('Don enregistré avec succès !');
-        }
-
-        // ✅ Synchronisation silencieuse en arrière-plan
-        setTimeout(() => {
-          syncAfterOnlineSuccess();
-        }, 2000);
-
-      } else {
-        // Mode offline : mettre à jour directement
-        throw new Error('Mode offline');
-      }
-
-    } catch (error) {
-      // Enregistrement offline avec mise à jour immédiate
-      console.log('💾 Enregistrement offline...');
-      
-      addPendingTransaction({
-        user_id: user.id,
-        team_id: profile.team_id,
-        tournee_id: tourneeActive.tournee_id,
-        amount: newDon.amount,
-        calendars_given: newDon.calendars_given,
-        payment_method: newDon.payment_method,
-        donator_name: newDon.donator_name || undefined,
-        donator_email: newDon.donator_email || undefined,
-        notes: newDon.notes || undefined,
-      });
-
-      // ✅ Les stats se mettent à jour automatiquement via le hook
-      showSuccessToast('Don sauvegardé hors-ligne !');
-    }
-
-    // Reset form et fermer
-    resetForm();
-    setShowNewDonForm(false);
-    setSubmitInProgress(false);
-  };
-
-  // Fonctions utilitaires
-  const resetForm = () => {
-    setNewDon({
-      amount: 10,
-      calendars_given: 1,
-      payment_method: 'especes',
-      donator_name: '',
-      donator_email: '',
-      notes: '',
-    });
-  };
-
-  const showSuccessToast = (message: string) => {
-    // Toast personnalisé ou alert simple
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-      toast.style.transform = 'translateX(100%)';
-      setTimeout(() => document.body.removeChild(toast), 300);
-    }, 3000);
-  };
 
   if (isLoading) {
     return (
@@ -309,227 +174,134 @@ export default function CalendriersPage() {
           </div>
         )}
 
-        {/* Active Tour - Mobile Optimized */}
+        {/* Interface simplifiée en 3 sections claires */}
         {tourneeActive && (
-          <div className="space-y-6">
-            {/* Stats Tour - Mobile-First Layout */}
-            <div className="bg-white rounded-2xl shadow-lg p-5 transition-all duration-300">
-              <div className="text-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900 flex items-center justify-center gap-2">
-                  <span className="text-2xl">📊</span>
-                  <span>Ma tournée en cours</span>
-                </h2>
-              </div>
-              
-              {/* Mobile-First Grid - 2 columns on mobile, 4 on larger screens */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-blue-50 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-blue-600 mb-1">
-                    {tourneeActive.calendars_initial}
-                  </div>
-                  <div className="text-sm text-blue-700 font-medium">Initial</div>
+          <div className="calendriers-interface space-y-6">
+            
+            {/* Section 1: Informations tournée en cours */}
+            <section className="tournee-status">
+              <div className="bg-white rounded-2xl shadow-lg p-5">
+                <div className="text-center mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                    <span className="text-2xl">📊</span>
+                    <span>Ma tournée en cours</span>
+                  </h2>
                 </div>
-                <div className="bg-green-50 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-green-600 transition-all duration-500 mb-1">
-                    {tourneeActive.calendars_distributed}
-                  </div>
-                  <div className="text-sm text-green-700 font-medium">Distribués</div>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-orange-600 transition-all duration-500 mb-1">
-                    {Math.max(0, tourneeActive.calendars_remaining)}
-                  </div>
-                  <div className="text-sm text-orange-700 font-medium">Restants</div>
-                </div>
-                <div className="bg-red-50 rounded-xl p-4 text-center">
-                  <div className="text-3xl font-bold text-red-600 transition-all duration-500 mb-1">
-                    {tourneeActive.total_amount}€
-                  </div>
-                  <div className="text-sm text-red-700 font-medium">Collecté</div>
-                </div>
-              </div>
-
-              {/* Progress Bar - Larger for mobile */}
-              <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
-                <div 
-                  className="bg-green-600 h-4 rounded-full transition-all duration-700 ease-out"
-                  style={{ 
-                    width: `${Math.min(100, (tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}%` 
-                  }}
-                ></div>
-              </div>
-
-              <div className="text-center mb-6">
-                <div className="text-lg font-semibold text-gray-800 mb-1">
-                  {Math.round((tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}% de progression
-                </div>
-                <div className="text-sm text-gray-600">
-                  {tourneeActive.total_transactions} don{tourneeActive.total_transactions > 1 ? 's' : ''} enregistré{tourneeActive.total_transactions > 1 ? 's' : ''}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowNewDonForm(true)}
-                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors text-lg flex items-center justify-center gap-3 tap-target"
-              >
-                <span className="text-xl">💰</span>
-                <span>Enregistrer un nouveau don</span>
-              </button>
-            </div>
-
-            {/* Mobile-First Form Modal */}
-            {showNewDonForm && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center p-0 sm:p-4 z-40">
-                <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      <span className="text-2xl">💰</span>
-                      <span>Nouveau Don</span>
-                    </h3>
-                    {!isOnline && (
-                      <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-                        Mode offline
-                      </div>
-                    )}
-                  </div>
-                  
-                  <form onSubmit={handleSubmitDon} className="space-y-6">
-                    {/* Amount Input - Mobile Optimized */}
-                    <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-3">
-                        Montant (€)
-                      </label>
-                      <input
-                        type="number"
-                        step="1"
-                        value={newDon.amount}
-                        onChange={(e) => setNewDon({ ...newDon, amount: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
-                        required
-                      />
+                
+                {/* Stats compactes - 2 colonnes principales */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="bg-red-50 rounded-xl p-4 text-center">
+                    <div className="text-3xl font-bold text-red-600 mb-1">
+                      {tourneeActive.total_amount}€
                     </div>
-
-                    {/* Calendar Count - Mobile Optimized */}
-                    <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-3">
-                        Nombre de calendriers
-                      </label>
-                      <select
-                        value={newDon.calendars_given}
-                        onChange={(e) => setNewDon({ ...newDon, calendars_given: parseInt(e.target.value) })}
-                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
-                      >
-                        {[1, 2, 3, 4, 5].map(num => (
-                          <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
-                        ))}
-                      </select>
+                    <div className="text-sm text-red-700 font-medium">Collecté</div>
+                  </div>
+                  <div className="bg-green-50 rounded-xl p-4 text-center">
+                    <div className="text-3xl font-bold text-green-600 mb-1">
+                      {tourneeActive.calendars_distributed}
                     </div>
+                    <div className="text-sm text-green-700 font-medium">Distribués</div>
+                  </div>
+                </div>
 
-                    {/* Payment Method - Large Tap Targets */}
-                    <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-3">
-                        Mode de paiement
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {(['especes', 'cheque', 'carte'] as const).map(method => (
-                          <button
-                            key={method}
-                            type="button"
-                            onClick={() => setNewDon({ ...newDon, payment_method: method })}
-                            className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors tap-target flex items-center justify-center gap-2 ${
-                              newDon.payment_method === method
-                                ? 'bg-red-600 text-white shadow-lg'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            }`}
-                          >
-                            <span className="text-xl">
-                              {method === 'especes' && '💵'} 
-                              {method === 'cheque' && '📝'} 
-                              {method === 'carte' && '💳'}
-                            </span>
-                            <span>{method.charAt(0).toUpperCase() + method.slice(1)}</span>
-                          </button>
-                        ))}
+                {/* Barre de progression */}
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                  <div 
+                    className="bg-green-600 h-3 rounded-full transition-all duration-700"
+                    style={{ 
+                      width: `${Math.min(100, (tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}%` 
+                    }}
+                  ></div>
+                </div>
+                
+                <div className="text-center text-sm text-gray-600">
+                  {Math.round((tourneeActive.calendars_distributed / tourneeActive.calendars_initial) * 100)}% • {tourneeActive.total_transactions} don{tourneeActive.total_transactions > 1 ? 's' : ''}
+                </div>
+              </div>
+            </section>
+
+            {/* Section 2: PARCOURS A - Mode principal (80% des cas) */}
+            <section className="mode-principal">
+              <div className="card-principale bg-white rounded-2xl shadow-lg p-6 border-2 border-red-100">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-3 flex items-center justify-center gap-3">
+                    <span className="text-3xl">🏠</span>
+                    <span>Clôturer ma tournée</span>
+                  </h2>
+                  <p className="text-gray-600 mb-6 text-lg leading-relaxed">
+                    Saisie des totaux de votre tournée
+                  </p>
+                  <button 
+                    className="btn-primary-large w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold py-5 px-8 rounded-xl transition-colors text-xl flex items-center justify-center gap-3"
+                    onClick={() => setShowClotureForm(true)}
+                  >
+                    <span className="text-2xl">✅</span>
+                    <span>Clôturer maintenant</span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* Section 3: PARCOURS B - Mode exceptionnel (rare) */}
+            <section className="mode-exceptionnel">
+              <details className="mode-rare bg-gray-50 rounded-2xl border-2 border-gray-200">
+                <summary className="p-5 cursor-pointer hover:bg-gray-100 rounded-2xl transition-colors list-none">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">⚡</span>
+                      <div>
+                        <div className="font-semibold text-gray-800 text-lg">Don individuel</div>
+                        <div className="text-sm text-gray-600">Enregistrer un don spécifique avec ou sans reçu email</div>
                       </div>
                     </div>
+                    <div className="text-gray-400 text-2xl">+</div>
+                  </div>
+                </summary>
+                
+                <div className="px-5 pb-5">
+                  <div className="border-t border-gray-200 pt-4">
+                    <button
+                      onClick={() => setShowExistingDonForm(true)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 text-lg"
+                    >
+                      <span className="text-xl">💰</span>
+                      <span>Nouveau don</span>
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </section>
 
-                    {/* Donator Name - Mobile Optimized */}
-                    <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-3">
-                        Nom du donateur (optionnel)
-                      </label>
-                      <input
-                        type="text"
-                        value={newDon.donator_name}
-                        onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
-                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
-                        placeholder="M. Dupont"
-                      />
-                    </div>
+            {/* Modal Clôture de Tournée */}
+            {showClotureForm && (
+              <ClotureModal 
+                tourneeActive={tourneeActive}
+                onSuccess={() => {
+                  setShowClotureForm(false);
+                  refreshTourneeData(true);
+                }}
+                onClose={() => setShowClotureForm(false)}
+              />
+            )}
 
-                    {/* Donator Email - Mobile Optimized with Receipt Info */}
-                    <div>
-                      <label className="block text-base font-semibold text-gray-800 mb-3">
-                        Email du donateur (optionnel)
-                        <span className="text-sm font-normal text-blue-600 block mt-1">
-                          📧 Un reçu sera envoyé automatiquement si fourni
-                        </span>
-                      </label>
-                      <input
-                        type="email"
-                        value={newDon.donator_email}
-                        onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
-                        className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 tap-target"
-                        placeholder="donateur@exemple.com"
-                      />
-                      {newDon.donator_email && (
-                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                          <p className="text-sm text-blue-800 flex items-center gap-2">
-                            <span className="text-blue-500">✓</span>
-                            <span>Reçu sera envoyé à <strong>{newDon.donator_email}</strong></span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Offline Notice - Mobile Optimized */}
-                    {!isOnline && (
-                      <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
-                        <div className="text-sm text-orange-800">
-                          <div className="flex items-center gap-2 font-semibold mb-2">
-                            <span className="text-lg">📱</span>
-                            <span>Mode hors-ligne</span>
-                          </div>
-                          <p>Ce don sera sauvegardé localement et synchronisé dès le retour du réseau.</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Action Buttons - Large Tap Targets */}
-                    <div className="flex flex-col sm:flex-row gap-3 pt-4">
-                      <button
-                        type="button"
-                        onClick={() => setShowNewDonForm(false)}
-                        className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-colors text-lg tap-target"
-                      >
-                        Annuler
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={submitInProgress}
-                        className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg tap-target"
-                      >
-                        {submitInProgress && (
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        )}
-                        <span>{isOnline ? 'Enregistrer' : 'Sauver offline'}</span>
-                      </button>
-                    </div>
-                  </form>
+            {/* Modal Don Unique (Mode Exceptionnel) */}
+            {showExistingDonForm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40 overflow-y-auto">
+                <div className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+                  <ExistingDonForm 
+                    tourneeActive={tourneeActive}
+                    onSuccess={() => {
+                      setShowExistingDonForm(false);
+                      refreshTourneeData(true);
+                    }}
+                    onCancel={() => setShowExistingDonForm(false)}
+                    updateTourneeOptimistic={updateTourneeOptimistic}
+                    syncAfterOnlineSuccess={syncAfterOnlineSuccess}
+                  />
                 </div>
               </div>
             )}
-          </div>
+          </div>  
         )}
       </main>
     </div>

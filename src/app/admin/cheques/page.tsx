@@ -316,22 +316,22 @@ export default function AdminChequesPage() {
                         className="rounded border-gray-300 text-red-600 focus:ring-red-500"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Chèque
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Montant
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Donateur
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Sapeur/Équipe
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Date Réception
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
                       Statut Dépôt
                     </th>
                   </tr>
@@ -361,9 +361,9 @@ export default function AdminChequesPage() {
                           <div className="text-sm font-medium text-gray-900">
                             N° {cheque.cheque_numero}
                           </div>
-                          <div className="text-sm text-gray-500">{cheque.cheque_banque}</div>
+                          <div className="text-sm text-gray-600">{cheque.cheque_banque}</div>
                           {cheque.cheque_tireur && (
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-600">
                               Tireur: {cheque.cheque_tireur}
                             </div>
                           )}
