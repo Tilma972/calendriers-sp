@@ -21,12 +21,11 @@ interface SendReceiptResponse {
   success: boolean;
   receiptNumber?: string;
   emailTo?: string;
-  workflowId?: string;
-  executionId?: string;
   message?: string;
-  estimatedProcessingTime?: number;
   quality?: string;
   sendEmail?: boolean;
+  pdfGenerated?: boolean;
+  pdfUrl?: string;
   transactionId?: string;
   timestamp?: string;
   fromCache?: boolean;
@@ -45,10 +44,10 @@ interface HealthCheckResponse {
   version?: string;
   environment?: string;
   checks: {
-    n8nConnection: any;
+    gotenbergConnection: any;
     storage: any;
     database: boolean;
-    configuration: any;
+    smtpConnection: any;
   };
   stats: {
     cache: {
@@ -165,10 +164,10 @@ export const useSendReceipt = () => {
         status: 'error',
         timestamp: new Date().toISOString(),
         checks: {
-          n8nConnection: { success: false, error: 'Network error' },
+          gotenbergConnection: { success: false, error: 'Network error' },
           storage: { healthy: false, error: 'Network error' },
           database: false,
-          configuration: { valid: false, error: 'Network error' }
+          smtpConnection: { success: false, error: 'Network error' }
         },
         stats: {
           cache: { size: 0, maxSize: 0, utilizationPercent: 0 },

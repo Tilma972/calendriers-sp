@@ -95,7 +95,7 @@ export default function ReceiptApiTester() {
     const result = await generateTestPDF(testTransactionId);
     
     if (result.success) {
-      alert(`✅ PDF Test généré: ${result.receiptNumber}\nWorkflow: ${result.workflowId}`);
+      alert(`✅ PDF Test généré: ${result.receiptNumber}\nPDF URL: ${result.pdfUrl || 'N/A'}`);
     } else {
       alert(`❌ Erreur PDF: ${result.error}`);
     }
@@ -292,7 +292,7 @@ export default function ReceiptApiTester() {
               <div className="space-y-1">
                 <div><strong>Reçu:</strong> {lastResult.receiptNumber}</div>
                 <div><strong>Email:</strong> {lastResult.emailTo}</div>
-                {lastResult.workflowId && <div><strong>Workflow:</strong> {lastResult.workflowId}</div>}
+                {lastResult.pdfUrl && <div><strong>PDF URL:</strong> <a href={lastResult.pdfUrl} target="_blank" className="text-blue-600 underline">Télécharger</a></div>}
                 {lastResult.message && <div><strong>Message:</strong> {lastResult.message}</div>}
               </div>
             ) : (
@@ -321,8 +321,12 @@ export default function ReceiptApiTester() {
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
               <div>
-                <div className="font-medium">n8n</div>
-                <div>{healthStatus.checks?.n8nConnection?.success ? '✅' : '❌'}</div>
+                <div className="font-medium">Gotenberg</div>
+                <div>{healthStatus.checks?.gotenbergConnection?.success ? '✅' : '❌'}</div>
+              </div>
+              <div>
+                <div className="font-medium">SMTP</div>
+                <div>{healthStatus.checks?.smtpConnection?.success ? '✅' : '❌'}</div>
               </div>
               <div>
                 <div className="font-medium">Storage</div>
@@ -332,10 +336,10 @@ export default function ReceiptApiTester() {
                 <div className="font-medium">Database</div>
                 <div>{healthStatus.checks?.database ? '✅' : '❌'}</div>
               </div>
-              <div>
-                <div className="font-medium">Cache</div>
-                <div>{healthStatus.stats?.cache?.size || 0}/{healthStatus.stats?.cache?.maxSize || 1000}</div>
-              </div>
+            </div>
+            
+            <div className="mt-2 text-xs">
+              <div><strong>Cache:</strong> {healthStatus.stats?.cache?.size || 0}/{healthStatus.stats?.cache?.maxSize || 1000} ({healthStatus.stats?.cache?.utilizationPercent || 0}%)</div>
             </div>
           </div>
         </div>

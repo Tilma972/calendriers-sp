@@ -1,9 +1,9 @@
 // src/app/api/donations/send-receipt/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/shared/lib/supabase';
-import { ReceiptService } from '@/shared/lib/receipt-service';
 import { ReceiptStorageService } from '@/shared/services/receiptStorageService';
-import type { ReceiptData } from '@/shared/lib/receipt-service';
+import { ReceiptTemplateService, type ReceiptData } from '@/shared/templates/receipt-template';
+import nodemailer from 'nodemailer';
 
 // Cache pour idempotence (en production, utiliser Redis ou DB)
 const processedRequests = new Map<string, { timestamp: number; result: any }>();
@@ -154,8 +154,7 @@ export async function POST(request: NextRequest) {
       associationRNA: settings?.association_rna || 'À compléter',
       legalText: settings?.legal_text || 'Ce reçu vous est délivré à des fins comptables et justificatives.',
       transactionId,
-      templateVersion: settings?.template_version || 'v1',
-      quality: options.quality || 'standard'
+      templateVersion: settings?.template_version || 'v1'
     };
     
     // 7. Mettre à jour le statut de la transaction (en cours)
@@ -169,22 +168,21 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', transactionId);
     
-    // 8. Envoyer la demande à n8n (asynchrone)
-    console.log('🚀 Envoi vers n8n workflow...');
-    const receiptResult = await ReceiptService.sendReceiptRequest(receiptData, {
-      send_email: options.sendEmail !== false,
-      generate_pdf: true,
-      store_in_supabase: true,
-      quality: options.quality || 'standard'
-    });
+    // 8. Générer HTML du reçu
+    console.log('📝 Génération HTML du reçu...');
+    const htmlContent = ReceiptTemplateService.generateReceiptHTML(receiptData);
     
-    if (!receiptResult.success) {
-      console.error('❌ Erreur n8n workflow:', receiptResult.error);
+    // 9. Convertir HTML en PDF via Gotenberg
+    console.log('🔄 Conversion PDF via Gotenberg...');
+    const pdfResult = await convertHtmlToPdf(htmlContent, receiptNumber);
+    
+    if (!pdfResult.success) {
+      console.error('❌ Erreur conversion PDF:', pdfResult.error);
       
       // Mettre à jour les logs avec l'erreur
       await ReceiptStorageService.updateEmailLog(transactionId, {
         status: 'failed',
-        errorMessage: receiptResult.error || 'Erreur envoi vers n8n workflow'
+        errorMessage: pdfResult.error || 'Erreur conversion PDF'
       });
       
       await supabase
@@ -196,24 +194,79 @@ export async function POST(request: NextRequest) {
         .eq('id', transactionId);
       
       return NextResponse.json({ 
-        error: 'Erreur envoi vers n8n',
-        details: receiptResult.error,
+        error: 'Erreur conversion PDF',
+        details: pdfResult.error,
         receiptNumber,
         transactionId
       }, { status: 500 });
     }
     
-    // 9. Réponse de succès
+    // 10. Stocker le PDF dans Supabase Storage
+    console.log('💾 Stockage PDF dans Supabase...');
+    const storageResult = await storePdfInSupabase(pdfResult.pdfBuffer, receiptNumber);
+    
+    if (!storageResult.success) {
+      console.error('❌ Erreur stockage PDF:', storageResult.error);
+      // On continue car le PDF a été généré
+    }
+    
+    // 11. Envoyer l'email avec PDF en pièce jointe
+    if (options.sendEmail !== false) {
+      console.log('📧 Envoi email avec PDF...');
+      const emailResult = await sendEmailWithPdf({
+        to: finalDonatorEmail,
+        subject: `🙏 Merci ${finalDonatorName} ! Votre don fait la différence`,
+        receiptData,
+        pdfBuffer: pdfResult.pdfBuffer,
+        receiptNumber
+      });
+      
+      if (!emailResult.success) {
+        console.error('❌ Erreur envoi email:', emailResult.error);
+        
+        await ReceiptStorageService.updateEmailLog(transactionId, {
+          status: 'failed',
+          errorMessage: emailResult.error || 'Erreur envoi email'
+        });
+        
+        return NextResponse.json({ 
+          error: 'Erreur envoi email',
+          details: emailResult.error,
+          receiptNumber,
+          transactionId,
+          pdfGenerated: true,
+          pdfUrl: storageResult.publicUrl
+        }, { status: 500 });
+      }
+      
+      // Mettre à jour les logs avec le succès
+      await ReceiptStorageService.updateEmailLog(transactionId, {
+        status: 'sent',
+        sentAt: new Date().toISOString()
+      });
+    }
+    
+    // 12. Mettre à jour la transaction avec succès
+    await supabase
+      .from('transactions')
+      .update({
+        receipt_status: 'generated',
+        receipt_generated_at: new Date().toISOString(),
+        receipt_pdf_url: storageResult.publicUrl,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', transactionId);
+    
+    // 13. Réponse de succès
     const result = {
       success: true,
       receiptNumber,
       emailTo: finalDonatorEmail,
-      workflowId: receiptResult.workflowId,
-      executionId: receiptResult.workflowId, // n8n peut fournir les deux
       message: resend ? 'Reçu renvoyé avec succès' : 'Reçu envoyé avec succès',
-      estimatedProcessingTime: receiptResult.estimatedProcessingTime,
       quality: options.quality || 'standard',
       sendEmail: options.sendEmail !== false,
+      pdfGenerated: true,
+      pdfUrl: storageResult.publicUrl,
       transactionId,
       timestamp: new Date().toISOString()
     };
@@ -278,15 +331,14 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🏥 Health check API send-receipt...');
     
-    // 1. Test connexion n8n
-    const n8nTest = await ReceiptService.testN8nConnection();
+    // 1. Test connexion Gotenberg
+    const gotenbergTest = await testGotenbergConnection();
     
     // 2. Test système de stockage
     const storageHealth = await ReceiptStorageService.healthCheck();
     
-    // 3. Configuration n8n
-    const n8nConfig = ReceiptService.getConfiguration();
-    const n8nValidation = ReceiptService.validateEnvironment();
+    // 3. Test SMTP
+    const smtpTest = await testSmtpConnection();
     
     // 4. Statistiques des emails dernières 24h
     const emailStatsResult = await ReceiptStorageService.getEmailStats24h();
@@ -310,22 +362,22 @@ export async function GET(request: NextRequest) {
     
     // 7. Santé globale
     const overallHealthy = 
-      n8nTest.success && 
+      gotenbergTest.success && 
       storageHealth.healthy && 
       dbHealthy && 
-      n8nValidation.valid;
+      smtpTest.success;
     
     const response = {
       status: overallHealthy ? 'healthy' : 'degraded',
       timestamp: new Date().toISOString(),
-      version: '1.0.0',
+      version: '2.0.0',
       environment: process.env.NODE_ENV || 'unknown',
       
       checks: {
-        n8nConnection: n8nTest,
+        gotenbergConnection: gotenbergTest,
         storage: storageHealth,
         database: dbHealthy,
-        configuration: n8nValidation
+        smtpConnection: smtpTest
       },
       
       stats: {
@@ -335,13 +387,13 @@ export async function GET(request: NextRequest) {
       },
       
       configuration: {
-        n8n: {
-          hasUrl: !!n8nConfig.n8nUrl,
-          hasApiKey: n8nConfig.hasApiKey,
-          url: n8nConfig.n8nUrl // Partiellement masqué
+        gotenberg: {
+          hasUrl: !!process.env.GOTENBERG_URL,
+          hasAuth: !!(process.env.GOTENBERG_USERNAME && process.env.GOTENBERG_PASSWORD),
+          url: process.env.GOTENBERG_URL?.replace(/\/[^/]*$/, '/***')
         },
-        app: {
-          url: n8nConfig.appUrl
+        smtp: {
+          configured: checkSmtpConfig()
         }
       },
       
@@ -404,4 +456,217 @@ export async function DELETE(request: NextRequest) {
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
+}
+
+// Helper functions
+async function convertHtmlToPdf(htmlContent: string, receiptNumber: string): Promise<{
+  success: boolean;
+  pdfBuffer?: Buffer;
+  error?: string;
+}> {
+  try {
+    if (!process.env.GOTENBERG_URL || !process.env.GOTENBERG_USERNAME || !process.env.GOTENBERG_PASSWORD) {
+      throw new Error('Configuration Gotenberg manquante');
+    }
+
+    const credentials = `${process.env.GOTENBERG_USERNAME}:${process.env.GOTENBERG_PASSWORD}`;
+    const encodedCredentials = Buffer.from(credentials).toString('base64');
+    const endpoint = `${process.env.GOTENBERG_URL}/forms/chromium/convert/html`;
+
+    // Créer FormData
+    const formData = new FormData();
+    
+    // Fichier HTML
+    const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+    formData.append('files', htmlBlob, 'receipt.html');
+    
+    // Options PDF
+    formData.append('paperWidth', '8.27'); // A4 width
+    formData.append('paperHeight', '11.7'); // A4 height
+    formData.append('marginTop', '0.79'); // 20mm
+    formData.append('marginBottom', '0.79'); // 20mm
+    formData.append('marginLeft', '0.79'); // 20mm
+    formData.append('marginRight', '0.79'); // 20mm
+    formData.append('printBackground', 'true');
+    formData.append('scale', '1.0');
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${encodedCredentials}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gotenberg error: ${response.status} - ${errorText}`);
+    }
+
+    const pdfBuffer = Buffer.from(await response.arrayBuffer());
+    console.log(`✅ PDF généré: ${pdfBuffer.length} bytes`);
+    
+    return { success: true, pdfBuffer };
+
+  } catch (error: any) {
+    console.error('❌ Erreur conversion PDF:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function storePdfInSupabase(pdfBuffer: Buffer, receiptNumber: string): Promise<{
+  success: boolean;
+  publicUrl?: string;
+  error?: string;
+}> {
+  try {
+    const fileName = `${receiptNumber}.pdf`;
+    
+    const { data, error } = await supabase.storage
+      .from('receipts')
+      .upload(fileName, pdfBuffer, {
+        contentType: 'application/pdf',
+        upsert: true
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from('receipts')
+      .getPublicUrl(fileName);
+
+    console.log(`✅ PDF stocké: ${fileName}`);
+    return { success: true, publicUrl: urlData.publicUrl };
+
+  } catch (error: any) {
+    console.error('❌ Erreur stockage PDF:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function sendEmailWithPdf({
+  to,
+  subject,
+  receiptData,
+  pdfBuffer,
+  receiptNumber
+}: {
+  to: string;
+  subject: string;
+  receiptData: ReceiptData;
+  pdfBuffer: Buffer;
+  receiptNumber: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Configuration SMTP Supabase
+    const { data: smtpConfig, error: configError } = await supabase
+      .from('email_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (configError || !smtpConfig) {
+      throw new Error('Configuration SMTP non trouvée');
+    }
+
+    // Créer le transporteur SMTP
+    const transporter = nodemailer.createTransporter({
+      host: smtpConfig.smtp_host,
+      port: smtpConfig.smtp_port,
+      secure: smtpConfig.smtp_port === 465,
+      auth: {
+        user: smtpConfig.smtp_user,
+        pass: smtpConfig.smtp_password
+      }
+    });
+
+    // Générer le contenu HTML et texte
+    const htmlContent = ReceiptTemplateService.generateReceiptHTML(receiptData);
+    const textContent = ReceiptTemplateService.generateReceiptText(receiptData);
+
+    // Envoyer l'email
+    await transporter.sendMail({
+      from: `${smtpConfig.smtp_from_name} <${smtpConfig.smtp_from_email}>`,
+      to: to,
+      subject: subject,
+      html: htmlContent,
+      text: textContent,
+      attachments: [
+        {
+          filename: `${receiptNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    });
+
+    console.log(`✅ Email envoyé avec PDF: ${to}`);
+    return { success: true };
+
+  } catch (error: any) {
+    console.error('❌ Erreur envoi email:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function testGotenbergConnection(): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!process.env.GOTENBERG_URL || !process.env.GOTENBERG_USERNAME || !process.env.GOTENBERG_PASSWORD) {
+      return { success: false, error: 'Configuration Gotenberg manquante' };
+    }
+
+    const credentials = `${process.env.GOTENBERG_USERNAME}:${process.env.GOTENBERG_PASSWORD}`;
+    const encodedCredentials = Buffer.from(credentials).toString('base64');
+    
+    const response = await fetch(`${process.env.GOTENBERG_URL}/health`, {
+      headers: {
+        'Authorization': `Basic ${encodedCredentials}`
+      },
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function testSmtpConnection(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: smtpConfig, error } = await supabase
+      .from('email_settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (error || !smtpConfig) {
+      return { success: false, error: 'Configuration SMTP non trouvée' };
+    }
+
+    const transporter = nodemailer.createTransporter({
+      host: smtpConfig.smtp_host,
+      port: smtpConfig.smtp_port,
+      secure: smtpConfig.smtp_port === 465,
+      auth: {
+        user: smtpConfig.smtp_user,
+        pass: smtpConfig.smtp_password
+      }
+    });
+
+    await transporter.verify();
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+function checkSmtpConfig(): boolean {
+  // Cette fonction vérifiera si les variables SMTP sont configurées
+  return true; // À implémenter selon vos besoins
 }

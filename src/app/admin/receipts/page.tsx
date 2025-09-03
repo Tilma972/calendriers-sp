@@ -1,11 +1,10 @@
-// src/app/admin/receipts/page.tsx - Interface gestion des reçus (Version n8n + Gotenberg)
+// src/app/admin/receipts/page.tsx - Interface gestion des reçus (Version Gotenberg direct)
 'use client';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/shared/lib/supabase';
 import { useAuthStore } from '@/shared/stores/auth';
-import { useReceipts, useReceiptStats } from '@/shared/hooks/useReceipts';
-import { ReceiptService } from '@/shared/lib/receipt-service';
+import { useSendReceipt } from '@/shared/hooks/useSendReceipt';
 import ReceiptApiTester from '@/components/admin/ReceiptApiTester';
 
 interface Transaction {
@@ -28,25 +27,54 @@ export default function ReceiptsPage() {
   const { user, profile } = useAuthStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ total: 0, pending: 0, generated: 0, failed: 0, sent: 0, todayGenerated: 0 });
   const { 
-    isGenerating, 
-    isTestingConnection,
-    generateReceipt, 
-    generateTestReceipt, 
-    processPendingReceipts,
-    testN8nConnection,
-    validateConfiguration,
-    refreshStats 
-  } = useReceipts();
-  const { stats, isLoading: statsLoading, successRate } = useReceiptStats();
+    isLoading: isGenerating,
+    sendReceipt,
+    generateTestPDF,
+    checkHealth
+  } = useSendReceipt();
   const [filter, setFilter] = useState<'all' | 'with_email' | 'without_receipt' | 'pending' | 'failed'>('with_email');
   const [showConfig, setShowConfig] = useState(false);
-  const [config, setConfig] = useState<any>(null);
+  const [healthStatus, setHealthStatus] = useState<any>(null);
 
   // Charger les transactions
   useEffect(() => {
     loadTransactions();
+    loadStats();
   }, [filter]);
+
+  const loadStats = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('receipt_status, receipt_generated_at')
+        .not('receipt_status', 'is', null);
+
+      if (error) {
+        console.error('Erreur chargement stats:', error);
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      
+      const newStats = {
+        total: data.length,
+        pending: data.filter(t => t.receipt_status === 'pending').length,
+        generated: data.filter(t => t.receipt_status === 'generated').length,
+        failed: data.filter(t => t.receipt_status === 'failed').length,
+        sent: data.filter(t => t.receipt_status === 'sent').length,
+        todayGenerated: data.filter(t => 
+          t.receipt_generated_at && 
+          t.receipt_generated_at.startsWith(today)
+        ).length
+      };
+
+      setStats(newStats);
+    } catch (error) {
+      console.error('Erreur loadStats:', error);
+    }
+  };
 
   const loadTransactions = async () => {
     try {
@@ -89,18 +117,19 @@ export default function ReceiptsPage() {
   // Envoyer un reçu manuellement
   const handleSendReceipt = async (transactionId: string, testMode: boolean = false) => {
     try {
-      const result = await generateReceipt(transactionId, { 
-        autoSend: !testMode,
-        quality: testMode ? 'draft' : 'standard'
-      });
+      const result = testMode 
+        ? await generateTestPDF(transactionId)
+        : await sendReceipt(transactionId, {
+            options: { quality: 'standard', sendEmail: true }
+          });
       
       if (result.success) {
         const message = testMode 
-          ? `✅ PDF de test généré ! Workflow ID: ${result.workflowId}`
-          : `✅ Reçu envoyé avec succès ! Workflow ID: ${result.workflowId}`;
+          ? `✅ PDF de test généré ! ${result.pdfUrl ? 'URL: ' + result.pdfUrl : ''}`
+          : `✅ Reçu envoyé avec succès ! Numéro: ${result.receiptNumber}`;
         alert(message);
         loadTransactions();
-        refreshStats();
+        loadStats();
       } else {
         alert(`❌ Erreur: ${result.error}`);
       }
@@ -110,60 +139,18 @@ export default function ReceiptsPage() {
     }
   };
 
-  // Traiter tous les reçus en attente
-  const handleProcessPendingReceipts = async () => {
-    if (!confirm('Traiter tous les reçus en attente ? Cette opération peut prendre du temps.')) {
-      return;
-    }
-
+  // Health check
+  const handleHealthCheck = async () => {
     try {
-      const result = await processPendingReceipts();
-      alert(`✅ Traitement terminé: ${result.succeeded}/${result.processed} reçus envoyés`);
-      loadTransactions();
-      refreshStats();
-    } catch (error: any) {
-      alert(`❌ Erreur traitement batch: ${error.message}`);
-    }
-  };
-
-  // Test de connexion n8n
-  const handleTestConnection = async () => {
-    try {
-      const result = await testN8nConnection();
-      if (result.success) {
-        alert('✅ Connexion n8n OK !');
-      } else {
-        alert(`❌ Erreur connexion n8n: ${result.error}`);
-      }
-    } catch (error: any) {
-      alert(`❌ Erreur test: ${error.message}`);
-    }
-  };
-
-  // Valider la configuration
-  const handleValidateConfig = async () => {
-    try {
-      const result = await validateConfiguration();
-      setConfig(result);
+      const result = await checkHealth();
+      setHealthStatus(result);
       setShowConfig(true);
     } catch (error: any) {
-      alert(`❌ Erreur validation config: ${error.message}`);
+      alert(`❌ Erreur health check: ${error.message}`);
     }
   };
 
-  // Générer un reçu de test
-  const handleTestReceipt = async () => {
-    try {
-      const result = await generateTestReceipt();
-      if (result.success) {
-        alert(`✅ Reçu de test généré ! Workflow ID: ${result.workflowId}`);
-      } else {
-        alert(`❌ Erreur test: ${result.error}`);
-      }
-    } catch (error: any) {
-      alert(`❌ Erreur: ${error.message}`);
-    }
-  };
+  const successRate = stats.total > 0 ? Math.round((stats.generated + stats.sent) / stats.total * 100) : 0;
 
   // Vérifier les permissions
   if (!user || !profile || !['chef_equipe', 'tresorier'].includes(profile.role)) {
@@ -254,43 +241,19 @@ export default function ReceiptsPage() {
           <h3 className="text-lg font-semibold mb-3">Actions rapides</h3>
           <div className="flex gap-2 flex-wrap">
             <button
-              onClick={handleProcessPendingReceipts}
-              disabled={isGenerating}
-              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              onClick={handleHealthCheck}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700"
             >
-              {isGenerating ? '⏳ Traitement...' : '📧 Traiter reçus en attente'}
-            </button>
-            
-            <button
-              onClick={handleTestReceipt}
-              disabled={isGenerating}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isGenerating ? '⏳ Test...' : '🧪 Test reçu'}
-            </button>
-
-            <button
-              onClick={handleTestConnection}
-              disabled={isTestingConnection}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
-            >
-              {isTestingConnection ? '⏳ Test...' : '🔗 Test n8n'}
-            </button>
-
-            <button
-              onClick={handleValidateConfig}
-              className="px-4 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700"
-            >
-              ⚙️ Config
+              🏥 Health Check
             </button>
           </div>
         </div>
 
         {/* Configuration (affichée sur demande) */}
-        {showConfig && config && (
+        {showConfig && healthStatus && (
           <div className="bg-white rounded-lg shadow p-4 mb-6">
             <div className="flex justify-between items-start mb-3">
-              <h3 className="text-lg font-semibold">Configuration n8n</h3>
+              <h3 className="text-lg font-semibold">Configuration du système</h3>
               <button 
                 onClick={() => setShowConfig(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -300,50 +263,46 @@ export default function ReceiptsPage() {
             </div>
             
             <div className="space-y-3">
-              <div className={`p-3 rounded ${config.isValid ? 'bg-green-50' : 'bg-red-50'}`}>
-                <p className={`font-medium ${config.isValid ? 'text-green-800' : 'text-red-800'}`}>
-                  {config.isValid ? '✅ Configuration valide' : '❌ Configuration invalide'}
+              <div className={`p-3 rounded ${healthStatus.status === 'healthy' ? 'bg-green-50' : 'bg-red-50'}`}>
+                <p className={`font-medium ${healthStatus.status === 'healthy' ? 'text-green-800' : 'text-red-800'}`}>
+                  {healthStatus.status === 'healthy' ? '✅ Système opérationnel' : '❌ Problèmes détectés'}
                 </p>
               </div>
 
-              {config.configuration && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">URL n8n</p>
-                    <p className="text-sm text-gray-900 font-mono">
-                      {config.configuration.n8nUrl || 'Non configuré'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Clé API</p>
-                    <p className="text-sm text-gray-900">
-                      {config.configuration.hasApiKey ? '🔑 Configurée' : '❌ Non configurée'}
-                    </p>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-sm font-medium text-gray-600">Gotenberg</p>
+                  <p className="text-sm text-gray-900">
+                    {healthStatus.checks?.gotenbergConnection?.success ? '✅ OK' : '❌ Erreur'}
+                  </p>
                 </div>
-              )}
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-sm font-medium text-gray-600">SMTP</p>
+                  <p className="text-sm text-gray-900">
+                    {healthStatus.checks?.smtpConnection?.success ? '✅ OK' : '❌ Erreur'}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-sm font-medium text-gray-600">Storage</p>
+                  <p className="text-sm text-gray-900">
+                    {healthStatus.checks?.storage?.healthy ? '✅ OK' : '❌ Erreur'}
+                  </p>
+                </div>
+                <div className="p-3 bg-gray-50 rounded">
+                  <p className="text-sm font-medium text-gray-600">Database</p>
+                  <p className="text-sm text-gray-900">
+                    {healthStatus.checks?.database ? '✅ OK' : '❌ Erreur'}
+                  </p>
+                </div>
+              </div>
 
-              {config.validation.missing.length > 0 && (
-                <div className="p-3 bg-red-50 rounded">
-                  <p className="text-sm font-medium text-red-800 mb-1">Variables manquantes:</p>
-                  <ul className="text-sm text-red-700 list-disc list-inside">
-                    {config.validation.missing.map((item: string, idx: number) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {config.validation.warnings.length > 0 && (
-                <div className="p-3 bg-yellow-50 rounded">
-                  <p className="text-sm font-medium text-yellow-800 mb-1">Avertissements:</p>
-                  <ul className="text-sm text-yellow-700 list-disc list-inside">
-                    {config.validation.warnings.map((item: string, idx: number) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <div className="p-3 bg-blue-50 rounded">
+                <p className="text-sm font-medium text-blue-800 mb-1">Cache d'idempotence:</p>
+                <p className="text-sm text-blue-700">
+                  {healthStatus.stats?.cache?.size || 0}/{healthStatus.stats?.cache?.maxSize || 1000} 
+                  ({healthStatus.stats?.cache?.utilizationPercent || 0}%)
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -493,6 +452,17 @@ export default function ReceiptsPage() {
                                     {new Date(transaction.receipt_generated_at).toLocaleDateString('fr-FR')}
                                   </div>
                                 )}
+                                {transaction.receipt_pdf_url && (
+                                  <div className="text-xs">
+                                    <a 
+                                      href={transaction.receipt_pdf_url} 
+                                      target="_blank" 
+                                      className="text-blue-600 hover:underline"
+                                    >
+                                      📄 Télécharger
+                                    </a>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ) : transaction.receipt_status === 'pending' ? (
@@ -568,14 +538,14 @@ export default function ReceiptsPage() {
 
         {/* Instructions */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h4 className="font-semibold text-blue-900 mb-2">💡 Instructions - Système n8n + Gotenberg</h4>
+          <h4 className="font-semibold text-blue-900 mb-2">💡 Instructions - Système Gotenberg + SMTP Direct</h4>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>• <strong>Nouveau système :</strong> Les reçus sont générés via n8n + Gotenberg pour un PDF professionnel</li>
+            <li>• <strong>Nouveau système :</strong> Génération PDF directe via Gotenberg + envoi SMTP Supabase</li>
             <li>• <strong>API dédiée :</strong> <code>/api/donations/send-receipt</code> avec idempotence et monitoring</li>
-            <li>• <strong>Génération automatique :</strong> Les reçus sont traités en arrière-plan lors des transactions</li>
+            <li>• <strong>Plus de n8n :</strong> Tout le workflow est géré en interne par l'API Next.js</li>
             <li>• <strong>Statuts :</strong> ⏳ En attente → ✅ Généré/Envoyé → ❌ Échec</li>
             <li>• <strong>Actions :</strong> 📧 Envoyer/Renvoyer le reçu • 🧪 Tester la génération PDF</li>
-            <li>• <strong>Monitoring :</strong> Utilisez les statistiques et la config pour surveiller le système</li>
+            <li>• <strong>Stockage :</strong> PDFs stockés dans le bucket Supabase "receipts"</li>
             <li>• <strong>Format :</strong> Numéro de reçu RECU-YYYY-MM-DD-XXXXXX</li>
           </ul>
         </div>
