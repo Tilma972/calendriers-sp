@@ -378,7 +378,13 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method_enum"]
           processed_at: string | null
           qr_verification_code: string | null
+          receipt_generated_at: string | null
+          receipt_metadata: Json | null
           receipt_number: string | null
+          receipt_requested_at: string | null
+          receipt_status:
+            | Database["public"]["Enums"]["receipt_status_enum"]
+            | null
           receipt_url: string | null
           status: Database["public"]["Enums"]["transaction_status_enum"] | null
           stripe_session_id: string | null
@@ -406,7 +412,13 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method_enum"]
           processed_at?: string | null
           qr_verification_code?: string | null
+          receipt_generated_at?: string | null
+          receipt_metadata?: Json | null
           receipt_number?: string | null
+          receipt_requested_at?: string | null
+          receipt_status?:
+            | Database["public"]["Enums"]["receipt_status_enum"]
+            | null
           receipt_url?: string | null
           status?: Database["public"]["Enums"]["transaction_status_enum"] | null
           stripe_session_id?: string | null
@@ -434,7 +446,13 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method_enum"]
           processed_at?: string | null
           qr_verification_code?: string | null
+          receipt_generated_at?: string | null
+          receipt_metadata?: Json | null
           receipt_number?: string | null
+          receipt_requested_at?: string | null
+          receipt_status?:
+            | Database["public"]["Enums"]["receipt_status_enum"]
+            | null
           receipt_url?: string | null
           status?: Database["public"]["Enums"]["transaction_status_enum"] | null
           stripe_session_id?: string | null
@@ -702,6 +720,7 @@ export type Database = {
         | "carte"
         | "virement"
         | "especes_batch"
+      receipt_status_enum: "pending" | "generated" | "failed" | "cancelled"
       role_enum: "sapeur" | "chef_equipe" | "tresorier"
       tournee_status_enum:
         | "en_cours"
@@ -847,6 +866,7 @@ export const Constants = {
         "virement",
         "especes_batch",
       ],
+      receipt_status_enum: ["pending", "generated", "failed", "cancelled"],
       role_enum: ["sapeur", "chef_equipe", "tresorier"],
       tournee_status_enum: [
         "en_cours",

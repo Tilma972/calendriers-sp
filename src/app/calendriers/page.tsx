@@ -220,57 +220,36 @@ export default function CalendriersPage() {
               </div>
             </section>
 
-            {/* Section 2: PARCOURS A - Mode principal (80% des cas) */}
-            <section className="mode-principal">
-              <div className="card-principale bg-white rounded-2xl shadow-lg p-6 border-2 border-red-100">
-                <div className="text-center">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-3 flex items-center justify-center gap-3">
-                    <span className="text-3xl">🏠</span>
-                    <span>Clôturer ma tournée</span>
-                  </h2>
-                  <p className="text-gray-600 mb-6 text-lg leading-relaxed">
-                    Saisie des totaux de votre tournée
-                  </p>
-                  <button 
-                    className="btn-primary-large w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold py-5 px-8 rounded-xl transition-colors text-xl flex items-center justify-center gap-3"
-                    onClick={() => setShowClotureForm(true)}
-                  >
-                    <span className="text-2xl">✅</span>
-                    <span>Clôturer maintenant</span>
-                  </button>
-                </div>
+            {/* Interface simplifiée - 2 boutons principaux */}
+            <div className="space-y-4">
+              {/* Bouton principal : Don avec reçu immédiat */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <button
+                  onClick={() => setShowExistingDonForm(true)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-5 px-8 rounded-xl transition-colors text-xl flex items-center justify-center gap-3"
+                >
+                  <span className="text-2xl">📧</span>
+                  <span>Don avec reçu immédiat</span>
+                </button>
+                <p className="text-center text-gray-600 mt-3 text-sm">
+                  Si un donateur demande un reçu sur le moment
+                </p>
               </div>
-            </section>
 
-            {/* Section 3: PARCOURS B - Mode exceptionnel (rare) */}
-            <section className="mode-exceptionnel">
-              <details className="mode-rare bg-gray-50 rounded-2xl border-2 border-gray-200">
-                <summary className="p-5 cursor-pointer hover:bg-gray-100 rounded-2xl transition-colors list-none">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">⚡</span>
-                      <div>
-                        <div className="font-semibold text-gray-800 text-lg">Don individuel</div>
-                        <div className="text-sm text-gray-600">Enregistrer un don spécifique avec ou sans reçu email</div>
-                      </div>
-                    </div>
-                    <div className="text-gray-400 text-2xl">+</div>
-                  </div>
-                </summary>
-                
-                <div className="px-5 pb-5">
-                  <div className="border-t border-gray-200 pt-4">
-                    <button
-                      onClick={() => setShowExistingDonForm(true)}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-3 text-lg"
-                    >
-                      <span className="text-xl">💰</span>
-                      <span>Nouveau don</span>
-                    </button>
-                  </div>
-                </div>
-              </details>
-            </section>
+              {/* Bouton secondaire : Clôturer la tournée */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <button 
+                  className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold py-5 px-8 rounded-xl transition-colors text-xl flex items-center justify-center gap-3"
+                  onClick={() => setShowClotureForm(true)}
+                >
+                  <span className="text-2xl">✅</span>
+                  <span>Clôturer la tournée</span>
+                </button>
+                <p className="text-center text-gray-600 mt-3 text-sm">
+                  Saisie des totaux de votre tournée
+                </p>
+              </div>
+            </div>
 
             {/* Modal Clôture de Tournée */}
             {showClotureForm && (
