@@ -1,6 +1,4 @@
-Need to install the following packages:
-  supabase@2.39.2
-Ok to proceed? (y) export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -132,54 +130,6 @@ export type Database = {
           smtp_from_name?: string | null
           template_version?: string | null
           updated_at?: string | null
-        }
-        Relationships: []
-      }
-      n8n_workflow_logs: {
-        Row: {
-          created_at: string | null
-          error_message: string | null
-          id: string
-          payload_data: Json
-          processing_time_ms: number | null
-          response_data: Json | null
-          retry_count: number | null
-          success: boolean | null
-          transaction_id: string
-          updated_at: string | null
-          webhook_url: string | null
-          workflow_action: string
-          workflow_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          payload_data: Json
-          processing_time_ms?: number | null
-          response_data?: Json | null
-          retry_count?: number | null
-          success?: boolean | null
-          transaction_id: string
-          updated_at?: string | null
-          webhook_url?: string | null
-          workflow_action: string
-          workflow_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          error_message?: string | null
-          id?: string
-          payload_data?: Json
-          processing_time_ms?: number | null
-          response_data?: Json | null
-          retry_count?: number | null
-          success?: boolean | null
-          transaction_id?: string
-          updated_at?: string | null
-          webhook_url?: string | null
-          workflow_action?: string
-          workflow_id?: string | null
         }
         Relationships: []
       }
@@ -561,19 +511,6 @@ export type Database = {
         }
         Relationships: []
       }
-      n8n_workflow_stats: {
-        Row: {
-          avg_processing_time_ms: number | null
-          date_requested: string | null
-          failed_requests: number | null
-          max_processing_time_ms: number | null
-          success_rate_percent: number | null
-          successful_requests: number | null
-          total_requests: number | null
-          workflow_action: string | null
-        }
-        Relationships: []
-      }
       v_chef_validation_queue: {
         Row: {
           amount: number | null
@@ -759,7 +696,12 @@ export type Database = {
       }
     }
     Enums: {
-      payment_method_enum: "especes" | "cheque" | "carte" | "virement" | "especes_batch"
+      payment_method_enum:
+        | "especes"
+        | "cheque"
+        | "carte"
+        | "virement"
+        | "especes_batch"
       role_enum: "sapeur" | "chef_equipe" | "tresorier"
       tournee_status_enum:
         | "en_cours"
@@ -898,7 +840,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      payment_method_enum: ["especes", "cheque", "carte", "virement"],
+      payment_method_enum: [
+        "especes",
+        "cheque",
+        "carte",
+        "virement",
+        "especes_batch",
+      ],
       role_enum: ["sapeur", "chef_equipe", "tresorier"],
       tournee_status_enum: [
         "en_cours",
