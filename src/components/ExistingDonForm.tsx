@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
 import { supabase } from '@/shared/lib/supabase';
+import QRCodeDisplay from './QRCodeDisplay';
 
 interface NewTransactionData {
   amount: number;
@@ -34,6 +35,7 @@ export default function ExistingDonForm({
   const { isOnline, addPendingTransaction } = useOfflineStore();
   const [submitInProgress, setSubmitInProgress] = useState(false);
   const [needReceipt, setNeedReceipt] = useState(true);
+  const [showQRCode, setShowQRCode] = useState(false);
 
   const [newDon, setNewDon] = useState<NewTransactionData>({
     amount: 10,
@@ -251,7 +253,7 @@ export default function ExistingDonForm({
           <label className="block text-base font-semibold text-gray-800 mb-3">
             Mode de paiement
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             {(['especes', 'cheque', 'carte'] as const).map(method => (
               <button
                 key={method}
@@ -270,6 +272,19 @@ export default function ExistingDonForm({
                 <span>{method.charAt(0).toUpperCase() + method.slice(1)}</span>
               </button>
             ))}
+            
+            {/* Bouton QR Code */}
+            <button
+              type="button"
+              onClick={() => setShowQRCode(!showQRCode)}
+              className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${showQRCode
+                ? 'bg-blue-600 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+            >
+              <span className="text-xl">📱</span>
+              <span>QR Code</span>
+            </button>
           </div>
         </div>
 
@@ -332,26 +347,58 @@ export default function ExistingDonForm({
         )}
 
         {/* Action Buttons - Large Tap Targets */}
-        <div className="flex flex-col sm:flex-row gap-3 pt-4">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-colors text-lg"
-          >
-            Annuler
-          </button>
-          <button
-            type="submit"
-            disabled={submitInProgress}
-            className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
-          >
-            {submitInProgress && (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            )}
-            <span>{isOnline ? 'Enregistrer' : 'Sauver offline'}</span>
-          </button>
-        </div>
+        {!showQRCode && (
+          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-colors text-lg"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={submitInProgress}
+              className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
+            >
+              {submitInProgress && (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              )}
+              <span>{isOnline ? 'Enregistrer' : 'Sauver offline'}</span>
+            </button>
+          </div>
+        )}
       </form>
+
+      {/* QR Code Display */}
+      {showQRCode && profile?.team_id && (
+        <div className="mt-6 border-t pt-6">
+          <QRCodeDisplay
+            teamId={profile.team_id}
+            teamName={tourneeActive?.team_name || 'Votre équipe'}
+            teamColor={tourneeActive?.team_color || '#dc2626'}
+            onSuccess={(transactionId) => {
+              console.log('✅ QR Payment completed:', transactionId);
+              // Mise à jour optimiste
+              updateTourneeOptimistic({
+                amount: 10,
+                calendars_given: 1
+              });
+              // Synchronisation
+              setTimeout(() => {
+                syncAfterOnlineSuccess();
+              }, 2000);
+              // Fermer le QR code et le formulaire
+              setShowQRCode(false);
+              onSuccess();
+            }}
+            onExpired={() => {
+              console.log('⏰ QR Code expired');
+            }}
+            className="bg-gray-50"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -237,6 +237,7 @@ export type Database = {
           created_at: string | null
           id: string
           name: string
+          stripe_payment_link_url: string | null
           updated_at: string | null
         }
         Insert: {
@@ -246,6 +247,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name: string
+          stripe_payment_link_url?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -255,6 +257,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           name?: string
+          stripe_payment_link_url?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -271,6 +274,68 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_sapeurs_leaderboard"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      qr_interactions: {
+        Row: {
+          amount: number | null
+          calendars_count: number | null
+          completed_at: string | null
+          created_at: string | null
+          donator_email: string | null
+          donator_name: string | null
+          expires_at: string | null
+          id: string
+          interaction_id: string
+          ip_address: string | null
+          status: "pending" | "completed" | "expired" | "cancelled" | null
+          stripe_session_id: string | null
+          team_id: string
+          updated_at: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          amount?: number | null
+          calendars_count?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          donator_email?: string | null
+          donator_name?: string | null
+          expires_at?: string | null
+          id?: string
+          interaction_id: string
+          ip_address?: string | null
+          status?: "pending" | "completed" | "expired" | "cancelled" | null
+          stripe_session_id?: string | null
+          team_id: string
+          updated_at?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          amount?: number | null
+          calendars_count?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          donator_email?: string | null
+          donator_name?: string | null
+          expires_at?: string | null
+          id?: string
+          interaction_id?: string
+          ip_address?: string | null
+          status?: "pending" | "completed" | "expired" | "cancelled" | null
+          stripe_session_id?: string | null
+          team_id?: string
+          updated_at?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_interactions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -769,6 +834,7 @@ export type Database = {
         | "carte"
         | "virement"
         | "especes_batch"
+        | "carte_qr"
       receipt_status_enum: "pending" | "generated" | "failed" | "cancelled"
       role_enum: "sapeur" | "chef_equipe" | "tresorier"
       tournee_status_enum:
