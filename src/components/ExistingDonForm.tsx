@@ -1,7 +1,7 @@
-// src/components/ExistingDonForm.tsx - Composant pour don unique (existant)
+// src/components/ExistingDonForm.tsx - Composant optimisé PWA sapeurs-pompiers
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
 import { supabase } from '@/shared/lib/supabase';
@@ -15,6 +15,24 @@ interface NewTransactionData {
   donator_email?: string;
   notes?: string;
 }
+
+// Types pour les boutons de saisie rapide
+type QuickAmountButton = {
+  value: number;
+  label: string;
+  popular?: boolean;
+};
+
+// Types pour les méthodes de paiement avec couleurs et icons
+type PaymentMethodOption = {
+  id: 'especes' | 'cheque' | 'carte';
+  label: string;
+  icon: string;
+  bgColor: string;
+  textColor: string;
+  hoverColor: string;
+  description: string;
+};
 
 interface ExistingDonFormProps {
   tourneeActive: any;
@@ -45,6 +63,74 @@ export default function ExistingDonForm({
     donator_email: '',
     notes: '',
   });
+
+  // Configuration des boutons de saisie rapide
+  const quickAmounts: QuickAmountButton[] = useMemo(() => [
+    { value: 5, label: '5€', popular: false },
+    { value: 10, label: '10€', popular: true },
+    { value: 20, label: '20€', popular: false },
+  ], []);
+
+  // Configuration des méthodes de paiement optimisée
+  const paymentMethods: PaymentMethodOption[] = useMemo(() => [
+    {
+      id: 'especes',
+      label: 'Espèces',
+      icon: '💵',
+      bgColor: 'bg-green-600',
+      textColor: 'text-white',
+      hoverColor: 'hover:bg-green-700',
+      description: 'Paiement cash immédiat'
+    },
+    {
+      id: 'cheque',
+      label: 'Chèque',
+      icon: '📝',
+      bgColor: 'bg-blue-600',
+      textColor: 'text-white', 
+      hoverColor: 'hover:bg-blue-700',
+      description: 'Chèque à l\'ordre des SP'
+    },
+    {
+      id: 'carte',
+      label: 'Carte/QR',
+      icon: '💳📱',
+      bgColor: 'bg-red-600',
+      textColor: 'text-white',
+      hoverColor: 'hover:bg-red-700',
+      description: 'Paiement mobile sécurisé'
+    }
+  ], []);
+
+  // Feedback tactile mobile (vibration)
+  const triggerHapticFeedback = useCallback(() => {
+    if ('vibrate' in navigator && /Mobi|Android/i.test(navigator.userAgent)) {
+      navigator.vibrate(50); // Vibration courte de 50ms
+    }
+  }, []);
+
+  // Handler optimisé pour la sélection rapide du montant
+  const handleQuickAmountSelect = useCallback((amount: number) => {
+    triggerHapticFeedback();
+    setNewDon(prev => ({
+      ...prev,
+      amount,
+      calendars_given: Math.max(1, Math.floor(amount / 10)) // Auto-calcul calendriers
+    }));
+  }, [triggerHapticFeedback]);
+
+  // Handler optimisé pour la sélection du mode de paiement
+  const handlePaymentMethodSelect = useCallback((method: 'especes' | 'cheque' | 'carte') => {
+    triggerHapticFeedback();
+    setNewDon(prev => ({ ...prev, payment_method: method }));
+    
+    // Auto-affichage QR pour les paiements carte
+    if (method === 'carte') {
+      setShowQRCode(true);
+    } else {
+      setShowQRCode(false);
+    }
+  }, [triggerHapticFeedback]);
 
   const handleSubmitDon = async (e: React.FormEvent) => {
     console.log('🔥 DÉBUT HANDLESUBMITDON');
@@ -203,202 +289,390 @@ export default function ExistingDonForm({
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+    <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 max-w-2xl mx-auto">
+      {/* Header optimisé */}
+      <div className="flex justify-between items-center mb-4 sm:mb-6">
+        <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
           <span className="text-2xl">💰</span>
           <span>Nouveau don</span>
         </h3>
         {!isOnline && (
-          <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-            Mode offline
+          <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs sm:text-sm font-medium">
+            <span className="hidden sm:inline">Mode offline</span>
+            <span className="sm:hidden">📴</span>
           </div>
         )}
       </div>
 
-      <form onSubmit={handleSubmitDon} className="space-y-6">
-        {/* Amount Input - Mobile Optimized */}
+      <form onSubmit={handleSubmitDon} className="space-y-4 sm:space-y-6">
+        
+        {/* Saisie rapide du montant - NOUVEAU */}
         <div>
           <label className="block text-base font-semibold text-gray-800 mb-3">
-            Montant (€)
+            Montant
           </label>
-          <input
-            type="number"
-            step="1"
-            value={newDon.amount}
-            onChange={(e) => setNewDon({ ...newDon, amount: parseFloat(e.target.value) || 0 })}
-            className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
-            required
-          />
-        </div>
-
-        {/* Calendar Count - Mobile Optimized */}
-        <div>
-          <label className="block text-base font-semibold text-gray-800 mb-3">
-            Nombre de calendriers
-          </label>
-          <select
-            value={newDon.calendars_given}
-            onChange={(e) => setNewDon({ ...newDon, calendars_given: parseInt(e.target.value) })}
-            className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
-          >
-            {[1, 2, 3, 4, 5].map(num => (
-              <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
+          
+          {/* Boutons de saisie rapide */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {quickAmounts.map(({ value, label, popular }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleQuickAmountSelect(value)}
+                className={`relative py-3 px-4 rounded-xl text-base font-semibold transition-all duration-200 
+                  transform active:scale-95 ${
+                  newDon.amount === value
+                    ? 'bg-red-600 text-white shadow-lg scale-105'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-102'
+                } ${popular ? 'ring-2 ring-red-200' : ''}`}
+                aria-label={`Sélectionner ${label}`}
+              >
+                {label}
+                {popular && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>
+                )}
+              </button>
             ))}
-          </select>
+          </div>
+
+          {/* Champ montant libre */}
+          <div className="relative">
+            <input
+              type="number"
+              step="1"
+              value={newDon.amount}
+              onChange={(e) => setNewDon({ ...newDon, amount: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+              placeholder="Ou saisissez un montant"
+              required
+              aria-label="Montant personnalisé"
+            />
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg">
+              €
+            </div>
+          </div>
         </div>
 
-        {/* Payment Method - Large Tap Targets */}
+        {/* Calendriers - Interface simplifiée */}
+        <div>
+          <label className="block text-base font-semibold text-gray-800 mb-3">
+            Calendriers
+          </label>
+          <div className="flex items-center gap-3">
+            <select
+              value={newDon.calendars_given}
+              onChange={(e) => setNewDon({ ...newDon, calendars_given: parseInt(e.target.value) })}
+              className="flex-1 px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
+              aria-label="Nombre de calendriers"
+            >
+              {[1, 2, 3, 4, 5].map(num => (
+                <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
+              ))}
+            </select>
+            <div className="text-sm text-gray-500 min-w-max">
+              ≈ {newDon.amount}€ total
+            </div>
+          </div>
+        </div>
+
+        {/* Modes de paiement - Interface optimisée 3 boutons */}
         <div>
           <label className="block text-base font-semibold text-gray-800 mb-3">
             Mode de paiement
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            {(['especes', 'cheque', 'carte'] as const).map(method => (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {paymentMethods.map((method) => (
               <button
-                key={method}
+                key={method.id}
                 type="button"
-                onClick={() => setNewDon({ ...newDon, payment_method: method })}
-                className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${newDon.payment_method === method
-                  ? 'bg-red-600 text-white shadow-lg'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                onClick={() => handlePaymentMethodSelect(method.id)}
+                className={`relative py-4 px-4 rounded-xl text-base font-semibold transition-all duration-200 
+                  transform active:scale-95 flex flex-col items-center gap-2 min-h-[80px]
+                  ${newDon.payment_method === method.id
+                    ? `${method.bgColor} ${method.textColor} shadow-lg scale-105`
+                    : `bg-gray-100 text-gray-700 hover:bg-gray-200 ${method.hoverColor} hover:scale-102`
                   }`}
+                aria-label={`Payer par ${method.label} - ${method.description}`}
               >
-                <span className="text-xl">
-                  {method === 'especes' && '💵'}
-                  {method === 'cheque' && '📝'}
-                  {method === 'carte' && '💳'}
-                </span>
-                <span>{method.charAt(0).toUpperCase() + method.slice(1)}</span>
+                <span className="text-xl sm:text-2xl">{method.icon}</span>
+                <span className="text-sm sm:text-base">{method.label}</span>
+                {newDon.payment_method === method.id && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-white text-green-600 rounded-full flex items-center justify-center text-xs">
+                    ✓
+                  </div>
+                )}
               </button>
             ))}
-            
-            {/* Bouton QR Code */}
-            <button
-              type="button"
-              onClick={() => setShowQRCode(!showQRCode)}
-              className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${showQRCode
-                ? 'bg-blue-600 text-white shadow-lg'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-            >
-              <span className="text-xl">📱</span>
-              <span>QR Code</span>
-            </button>
+          </div>
+          
+          {/* Description du mode sélectionné */}
+          <div className="mt-2 text-sm text-gray-600 text-center">
+            {paymentMethods.find(m => m.id === newDon.payment_method)?.description}
           </div>
         </div>
 
-        {/* ✅ NOUVEAU - Toujours afficher les champs */}
-        <>
-          <div className="mb-4">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Email du donateur *
-            </label>
-            <input
-              type="email"
-              value={newDon.donator_email}
-              onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
-              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
-              placeholder="email@exemple.com"
-              required
-            />
+        {/* Informations donateur - Interface condensée */}
+        <div className="space-y-4">
+          <h4 className="text-base font-semibold text-gray-800 flex items-center gap-2">
+            <span>👤</span>
+            <span>Informations donateur</span>
+            <span className="text-sm font-normal text-gray-500">(optionnel)</span>
+          </h4>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <input
+                type="email"
+                value={newDon.donator_email}
+                onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="Email (pour reçu)"
+                aria-label="Email du donateur"
+              />
+            </div>
+            
+            <div>
+              <input
+                type="text"
+                value={newDon.donator_name}
+                onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                placeholder="Nom complet"
+                aria-label="Nom du donateur"
+              />
+            </div>
           </div>
+        </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              Nom du donateur (optionnel)
-            </label>
-            <input
-              type="text"
-              value={newDon.donator_name}
-              onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
-              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Jean Dupont"
-            />
-          </div>
-        </>
-
-
-        {/* Notes */}
+        {/* Notes - Interface compacte */}
         <div>
-          <label className="block text-base font-semibold text-gray-800 mb-3">
-            Notes (optionnel)
+          <label className="block text-base font-semibold text-gray-800 mb-2">
+            Notes
           </label>
           <textarea
             value={newDon.notes}
             onChange={(e) => setNewDon({ ...newDon, notes: e.target.value })}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500 resize-none"
-            rows={3}
+            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none transition-all"
+            rows={2}
             placeholder="Informations complémentaires..."
+            aria-label="Notes sur le don"
           />
         </div>
 
-        {/* Offline Notice - Mobile Optimized */}
+        {/* QR Code intégré - NOUVEAU */}
+        {showQRCode && profile?.team_id && (
+          <div className="border-2 border-red-200 bg-red-50 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-bold text-red-900 flex items-center gap-2">
+                <span>📱</span>
+                <span>Paiement QR Code</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowQRCode(false)}
+                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-lg transition-colors"
+                aria-label="Fermer le QR Code"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <QRCodeDisplay
+              teamId={profile.team_id}
+              teamName={tourneeActive?.team_name || 'Votre équipe'}
+              teamColor={tourneeActive?.team_color || '#dc2626'}
+              suggestedAmount={newDon.amount}
+              calendarsCount={newDon.calendars_given}
+              onSuccess={(transactionId) => {
+                console.log('✅ QR Payment completed:', transactionId);
+                triggerHapticFeedback();
+                
+                // Mise à jour optimiste avec les vraies valeurs
+                updateTourneeOptimistic({
+                  amount: newDon.amount,
+                  calendars_given: newDon.calendars_given
+                });
+                
+                // Synchronisation
+                setTimeout(() => {
+                  syncAfterOnlineSuccess();
+                }, 2000);
+                
+                // Fermer tout et montrer succès
+                setShowQRCode(false);
+                onSuccess();
+              }}
+              onExpired={() => {
+                console.log('⏰ QR Code expired');
+                setShowQRCode(false);
+              }}
+              className="bg-white shadow-sm"
+            />
+          </div>
+        )}
+
+        {/* Notice mode offline - Optimisée */}
         {!isOnline && (
-          <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
-            <div className="text-sm text-orange-800">
-              <div className="flex items-center gap-2 font-semibold mb-2">
-                <span className="text-lg">📱</span>
-                <span>Mode hors-ligne</span>
+          <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-3">
+            <div className="flex items-start gap-3">
+              <span className="text-orange-600 text-lg">📴</span>
+              <div className="flex-1">
+                <div className="font-semibold text-orange-800 text-sm">Mode hors-ligne</div>
+                <div className="text-xs text-orange-700 mt-1">
+                  Ce don sera sauvegardé localement et synchronisé au retour du réseau.
+                </div>
               </div>
-              <p>Ce don sera sauvegardé localement et synchronisé dès le retour du réseau.</p>
             </div>
           </div>
         )}
 
-        {/* Action Buttons - Large Tap Targets */}
+        {/* Boutons d'action - Interface améliorée */}
         {!showQRCode && (
-          <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button
               type="button"
               onClick={onCancel}
-              className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-colors text-lg"
+              className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-95 text-base sm:text-lg"
+              aria-label="Annuler ce don"
             >
               Annuler
             </button>
+            
             <button
               type="submit"
               disabled={submitInProgress}
-              className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
+              className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-95 flex items-center justify-center gap-3 text-base sm:text-lg shadow-lg"
+              aria-label={`Enregistrer don de ${newDon.amount}€`}
             >
               {submitInProgress && (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              <span>{isOnline ? 'Enregistrer' : 'Sauver offline'}</span>
+              <span>
+                {submitInProgress 
+                  ? 'Traitement...' 
+                  : isOnline 
+                    ? `Enregistrer ${newDon.amount}€` 
+                    : 'Sauver offline'
+                }
+              </span>
             </button>
           </div>
         )}
-      </form>
 
-      {/* QR Code Display */}
-      {showQRCode && profile?.team_id && (
-        <div className="mt-6 border-t pt-6">
-          <QRCodeDisplay
-            teamId={profile.team_id}
-            teamName={tourneeActive?.team_name || 'Votre équipe'}
-            teamColor={tourneeActive?.team_color || '#dc2626'}
-            onSuccess={(transactionId) => {
-              console.log('✅ QR Payment completed:', transactionId);
-              // Mise à jour optimiste
-              updateTourneeOptimistic({
-                amount: 10,
-                calendars_given: 1
-              });
-              // Synchronisation
-              setTimeout(() => {
-                syncAfterOnlineSuccess();
-              }, 2000);
-              // Fermer le QR code et le formulaire
-              setShowQRCode(false);
-              onSuccess();
-            }}
-            onExpired={() => {
-              console.log('⏰ QR Code expired');
-            }}
-            className="bg-gray-50"
-          />
-        </div>
-      )}
+        {/* Info rapide sur le mode carte/QR */}
+        {newDon.payment_method === 'carte' && !showQRCode && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+            <div className="text-sm text-blue-800">
+              <span className="font-semibold">💡 Astuce :</span> Le QR code s'affichera automatiquement pour ce mode de paiement
+            </div>
+          </div>
+        )}
+      </form>
     </div>
   );
+}
+
+// Styles CSS personnalisés pour les micro-interactions
+const customStyles = `
+  .hover\\:scale-102:hover {
+    transform: scale(1.02);
+  }
+  
+  .scale-105 {
+    transform: scale(1.05);
+  }
+  
+  @keyframes pulse-success {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+  
+  .animate-pulse-success {
+    animation: pulse-success 0.6s ease-in-out;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      background-position: -200px 0;
+    }
+    100% {
+      background-position: calc(200px + 100%) 0;
+    }
+  }
+  
+  .shimmer-effect {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      transparent 100%
+    );
+    background-size: 200px 100%;
+    animation: shimmer 2s infinite;
+  }
+  
+  /* Smooth transitions pour tous les éléments interactifs */
+  .transition-all {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Focus states améliorés pour l'accessibilité */
+  .focus\\:ring-2:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    outline: none;
+  }
+  
+  /* Boutons avec feedback visuel amélioré */
+  .btn-payment {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn-payment::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s;
+  }
+  
+  .btn-payment:active::before {
+    width: 300px;
+    height: 300px;
+  }
+  
+  /* Responsive grid amélioré */
+  @media (max-width: 640px) {
+    .payment-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  @media (min-width: 641px) {
+    .payment-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+`;
+
+// Injection des styles dans le document (uniquement côté client)
+if (typeof document !== 'undefined') {
+  const existingStyle = document.getElementById('existing-don-form-styles');
+  if (!existingStyle) {
+    const styleSheet = document.createElement('style');
+    styleSheet.id = 'existing-don-form-styles';
+    styleSheet.textContent = customStyles;
+    document.head.appendChild(styleSheet);
+  }
 }
