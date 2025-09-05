@@ -1,6 +1,7 @@
 // src/shared/services/receiptStorageService.ts - Service de stockage et logs des reçus
 
-import { supabase } from '@/shared/lib/supabase';
+import { supabase, supabaseAdmin } from '@/shared/lib/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface EmailLogData {
   transactionId: string;
@@ -30,6 +31,14 @@ export interface ReceiptStorageData {
  */
 export class ReceiptStorageService {
   
+  // Fonction de vérification interne
+  private static getAdminClient(): SupabaseClient<any> {
+    if (!supabaseAdmin) {
+      throw new Error('Client Admin Supabase non initialisé. Vérifiez SUPABASE_SERVICE_ROLE_KEY.');
+    }
+    return supabaseAdmin;
+  }
+
   /**
    * Crée un log d'email dans la base de données
    */
@@ -203,16 +212,16 @@ export class ReceiptStorageService {
         const log = emailLogs[0];
         return {
           exists: true,
-          receiptNumber: log.receipt_number,
-          lastSent: log.created_at,
-          status: log.status
+          receiptNumber: log.receipt_number || undefined,
+          lastSent: log.created_at || undefined,
+          status: log.status || undefined
         };
       }
 
       // Vérifier dans la transaction elle-même
       const { data: transaction, error: transactionError } = await supabase
         .from('transactions')
-        .select('receipt_number, receipt_url, updated_at')
+        .select('receipt_number')
         .eq('id', transactionId)
         .single();
 
@@ -221,9 +230,9 @@ export class ReceiptStorageService {
       }
 
       return {
-        exists: !!transaction.receipt_number,
-        receiptNumber: transaction.receipt_number,
-        lastSent: transaction.updated_at
+        exists: !!transaction?.receipt_number,
+        receiptNumber: transaction?.receipt_number || undefined,
+        lastSent: undefined
       };
 
     } catch (error: any) {
@@ -252,7 +261,9 @@ export class ReceiptStorageService {
       }
 
       const stats = (data || []).reduce((acc, row) => {
-        acc[row.status] = (acc[row.status] || 0) + 1;
+        if (row.status) {
+          acc[row.status] = (acc[row.status] || 0) + 1;
+        }
         return acc;
       }, {} as Record<string, number>);
 
@@ -278,7 +289,8 @@ export class ReceiptStorageService {
       const { data, error } = await supabase
         .from('email_logs')
         .delete()
-        .lt('created_at', sixMonthsAgo.toISOString());
+        .lt('created_at', sixMonthsAgo.toISOString())
+        .select();
 
       if (error) {
         return { success: false, error: error.message };
@@ -288,6 +300,179 @@ export class ReceiptStorageService {
       console.log(`🧹 Logs nettoyés: ${deletedCount} entrées supprimées`);
 
       return { success: true, deletedCount };
+
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Initialise le bucket de stockage des reçus
+   */
+  static async initializeBucket(): Promise<void> {
+    try {
+      const admin = this.getAdminClient();
+      const { data: buckets } = await admin.storage.listBuckets();
+      const bucketExists = buckets?.some(bucket => bucket.name === 'receipts');
+      
+      if (!bucketExists) {
+        const { error } = await admin.storage.createBucket('receipts', {
+          public: true,
+          fileSizeLimit: 10 * 1024 * 1024, // 10MB max
+          allowedMimeTypes: ['application/pdf', 'text/html']
+        });
+        
+        if (error) throw error;
+        console.log('✅ Bucket receipts créé');
+      }
+    } catch (error: any) {
+      console.error('❌ Erreur initialisation bucket:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload un PDF de reçu dans le stockage Supabase
+   */
+  static async uploadReceiptPDF(pdfBuffer: Buffer, receiptNumber: string): Promise<{
+    success: boolean;
+    publicUrl?: string;
+    signedUrl?: string;
+    error?: string;
+  }> {
+    try {
+      const admin = this.getAdminClient();
+      await this.initializeBucket();
+      
+      const fileName = `${receiptNumber}.pdf`;
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      const filePath = `pdf-receipts/${year}/${month}/${fileName}`;
+
+      console.log('💾 Upload PDF:', { fileName, filePath, bufferSize: pdfBuffer.length });
+
+      const { data, error } = await admin.storage
+        .from('receipts')
+        .upload(filePath, pdfBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+          metadata: {
+            receiptNumber,
+            uploadedAt: new Date().toISOString(),
+            fileType: 'receipt_pdf'
+          }
+        });
+
+      if (error) {
+        console.error('❌ Erreur upload PDF:', error);
+        throw new Error(`Erreur upload PDF: ${error.message}`);
+      }
+
+      // Générer URL publique
+      const { data: urlData } = admin.storage
+        .from('receipts')
+        .getPublicUrl(filePath);
+
+      // Générer URL signée sécurisée (valide 1 an)
+      const { data: signedData } = await admin.storage
+        .from('receipts')
+        .createSignedUrl(filePath, 365 * 24 * 60 * 60); // 1 an
+
+      console.log('✅ PDF uploadé avec succès:', { 
+        path: filePath, 
+        publicUrl: urlData.publicUrl,
+        hasSignedUrl: !!signedData?.signedUrl 
+      });
+
+      return { 
+        success: true, 
+        publicUrl: urlData.publicUrl,
+        signedUrl: signedData?.signedUrl || urlData.publicUrl
+      };
+
+    } catch (error: any) {
+      console.error('❌ Erreur uploadReceiptPDF:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Récupère un PDF de reçu depuis le stockage
+   */
+  static async getReceiptPDF(receiptNumber: string): Promise<{
+    success: boolean;
+    signedUrl?: string;
+    error?: string;
+  }> {
+    try {
+      const admin = this.getAdminClient();
+      // Chercher le fichier dans la structure hiérarchique
+      const currentYear = new Date().getFullYear();
+      const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+      
+      // Essayer d'abord le mois/année courant
+      let filePath = `pdf-receipts/${currentYear}/${currentMonth}/${receiptNumber}.pdf`;
+      
+      let { data: signedData, error } = await admin.storage
+        .from('receipts')
+        .createSignedUrl(filePath, 60 * 60); // 1 heure
+
+      // Si pas trouvé, chercher dans les autres mois de l'année courante
+      if (error) {
+        for (let month = 1; month <= 12; month++) {
+          const monthStr = String(month).padStart(2, '0');
+          filePath = `pdf-receipts/${currentYear}/${monthStr}/${receiptNumber}.pdf`;
+          
+          const result = await admin.storage
+            .from('receipts')
+            .createSignedUrl(filePath, 60 * 60);
+          
+          if (!result.error && result.data?.signedUrl) {
+            signedData = result.data;
+            error = null;
+            break;
+          }
+        }
+      }
+
+      if (error || !signedData?.signedUrl) {
+        return { success: false, error: `Reçu PDF non trouvé: ${receiptNumber}` };
+      }
+
+      return { success: true, signedUrl: signedData.signedUrl };
+
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Supprime un PDF de reçu du stockage
+   */
+  static async deleteReceiptPDF(receiptNumber: string): Promise<{
+    success: boolean;
+    error?: string;
+  }> {
+    try {
+      const admin = this.getAdminClient();
+      // Chercher et supprimer le fichier
+      const currentYear = new Date().getFullYear();
+      
+      for (let month = 1; month <= 12; month++) {
+        const monthStr = String(month).padStart(2, '0');
+        const filePath = `pdf-receipts/${currentYear}/${monthStr}/${receiptNumber}.pdf`;
+        
+        const { error } = await admin.storage
+          .from('receipts')
+          .remove([filePath]);
+        
+        if (!error) {
+          console.log(`✅ PDF supprimé: ${filePath}`);
+          return { success: true };
+        }
+      }
+
+      return { success: false, error: `Reçu PDF non trouvé pour suppression: ${receiptNumber}` };
 
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -316,7 +501,8 @@ export class ReceiptStorageService {
 
       // Test base de données
       try {
-        const { error: dbError } = await supabase
+        const admin = this.getAdminClient();
+        const { error: dbError } = await admin
           .from('email_logs')
           .select('id')
           .limit(1);
@@ -327,7 +513,8 @@ export class ReceiptStorageService {
 
       // Test stockage Supabase
       try {
-        const { data: buckets, error: storageError } = await supabase.storage.listBuckets();
+        const admin = this.getAdminClient();
+        const { data: buckets, error: storageError } = await admin.storage.listBuckets();
         checks.storage = !storageError && buckets !== null;
       } catch {
         checks.storage = false;

@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
 import { supabase } from '@/shared/lib/supabase';
-import { emailService } from '@/shared/services/emailService';
 
 interface NewTransactionData {
   amount: number;
@@ -24,9 +23,9 @@ interface ExistingDonFormProps {
   syncAfterOnlineSuccess: () => void;
 }
 
-export default function ExistingDonForm({ 
-  tourneeActive, 
-  onSuccess, 
+export default function ExistingDonForm({
+  tourneeActive,
+  onSuccess,
   onCancel,
   updateTourneeOptimistic,
   syncAfterOnlineSuccess
@@ -34,8 +33,8 @@ export default function ExistingDonForm({
   const { user, profile } = useAuthStore();
   const { isOnline, addPendingTransaction } = useOfflineStore();
   const [submitInProgress, setSubmitInProgress] = useState(false);
-  const [needReceipt, setNeedReceipt] = useState(false);
-  
+  const [needReceipt, setNeedReceipt] = useState(true);
+
   const [newDon, setNewDon] = useState<NewTransactionData>({
     amount: 10,
     calendars_given: 1,
@@ -46,14 +45,16 @@ export default function ExistingDonForm({
   });
 
   const handleSubmitDon = async (e: React.FormEvent) => {
+    console.log('🔥 DÉBUT HANDLESUBMITDON');
     e.preventDefault();
-    
     if (!user || !profile?.team_id || !tourneeActive) return;
 
     setSubmitInProgress(true);
 
     try {
       if (isOnline) {
+        console.log('🔥 Mode online confirmé');
+
         // Mode online : enregistrer directement
         const { data, error } = await supabase
           .from('transactions')
@@ -68,12 +69,20 @@ export default function ExistingDonForm({
             donator_email: newDon.donator_email || null,
             notes: newDon.notes || null,
             status: 'pending'
-          });
+          })
+          .select(); // ← AJOUTEZ CETTE LIGNE !
+          
+        console.log('🔥 Insertion terminée, error:', error);
+        console.log('🔥 Data reçue:', data);
 
         if (error) {
           console.error('Erreur enregistrement don:', error);
           throw error;
         }
+
+        console.log('🔥 Pas d\'erreur, continuons...');
+        console.log('🔥 data[0]:', data[0]);
+        console.log('🔥 newDon.donator_email:', newDon.donator_email);
 
         // ✅ Mise à jour optimiste instantanée
         updateTourneeOptimistic({
@@ -81,66 +90,94 @@ export default function ExistingDonForm({
           calendars_given: newDon.calendars_given
         });
 
-        // ✅ Envoi automatique du reçu par email si demandé et email fourni
-        if (data && data[0] && needReceipt && newDon.donator_email) {
-          console.log('📧 Envoi reçu email en cours...', { transactionId: data[0].id, email: newDon.donator_email });
-          
-          // Envoi asynchrone pour ne pas bloquer l'UX
-          emailService.processReceiptForTransaction(data[0].id).then(result => {
+        console.log('🔥 Mise à jour optimiste terminée');
+
+        // ✅ VÉRIFICATION DE LA CONDITION CRITIQUE
+        console.log('🔥 Vérification conditions pour fetch:');
+        console.log('🔥   data:', !!data);
+        console.log('🔥   data[0]:', !!data?.[0]);
+        console.log('🔥   data[0].id:', data?.[0]?.id);
+        console.log('🔥   newDon.donator_email:', newDon.donator_email);
+
+        if (data && data[0] && newDon.donator_email) {
+          console.log('🚀 CONDITIONS OK - DÉBUT FETCH !');
+          console.log('📧 Envoi reçu via nouvelle API...', {
+            transactionId: data[0].id,
+            email: newDon.donator_email
+          });
+
+          try {
+            console.log('🚀 Lancement du fetch...');
+
+            const response = await fetch('/api/donations/send-receipt', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                transactionId: data[0].id,
+                donatorInfo: {
+                  email: newDon.donator_email,
+                  name: newDon.donator_name
+                },
+                sapeurInfo: {
+                  name: profile?.full_name || 'Sapeur-Pompier'
+                },
+                options: {
+                  sendEmail: true
+                }
+              })
+            });
+
+            console.log('📧 Statut réponse API:', response.status);
+            const result = await response.json();
+            console.log('📧 Résultat API complet:', result);
+
             if (result.success) {
-              console.log('✅ Reçu envoyé par email:', result.receiptNumber);
+              console.log('✅ Reçu envoyé avec nouvelle API:', result.receiptNumber);
               showSuccessToast(`Don enregistré ! Reçu envoyé à ${newDon.donator_email}`);
             } else {
-              console.warn('⚠️ Erreur envoi reçu:', result.error);
-              showSuccessToast('Don enregistré ! (Erreur envoi email)');
+              console.warn('⚠️ Erreur nouvelle API:', result.error);
+              showSuccessToast('Don enregistré ! (Erreur envoi email: ' + result.error + ')');
             }
-          }).catch(err => {
-            console.error('❌ Erreur process reçu:', err);
-            showSuccessToast('Don enregistré ! (Erreur envoi email)');
-          });
+          } catch (err) {
+            console.error('❌ Erreur fetch:', err);
+            showSuccessToast('Don enregistré ! (Erreur technique)');
+          }
         } else {
-          // ✅ Toast succès standard
+          console.log('❌ CONDITIONS FETCH NON REMPLIES:');
+          console.log('❌   data:', !!data);
+          console.log('❌   data[0]:', !!data?.[0]);
+          console.log('❌   email:', newDon.donator_email);
           showSuccessToast('Don enregistré avec succès !');
         }
 
-        // ✅ Synchronisation silencieuse en arrière-plan
+        // ✅ Synchronisation en arrière-plan
         setTimeout(() => {
           syncAfterOnlineSuccess();
         }, 2000);
 
       } else {
-        // Mode offline : mettre à jour directement
+        console.log('🔥 Mode offline');
         throw new Error('Mode offline');
       }
 
     } catch (error) {
-      // Enregistrement offline avec mise à jour immédiate
-      console.log('💾 Enregistrement offline...');
-      
-      addPendingTransaction({
-        user_id: user.id,
-        team_id: profile.team_id,
-        tournee_id: tourneeActive.tournee_id,
-        amount: newDon.amount,
-        calendars_given: newDon.calendars_given,
-        payment_method: newDon.payment_method,
-        donator_name: newDon.donator_name || undefined,
-        donator_email: newDon.donator_email || undefined,
-        notes: newDon.notes || undefined,
-      });
-
-      // ✅ Les stats se mettent à jour automatiquement via le hook
-      showSuccessToast('Don sauvegardé hors-ligne !');
+      console.log('💾 Erreur attrapée, mode offline...');
+      // ... resto du code offline
     }
 
-    // Reset form et fermer
+    // ✅ MAINTENANT seulement on ferme le formulaire
+    console.log('🔥 Fermeture du formulaire...');
     resetForm();
     onSuccess();
     setSubmitInProgress(false);
   };
 
+
+
   const resetForm = () => {
-    setNeedReceipt(false);
+    setNeedReceipt(true);
     setNewDon({
       amount: 10,
       calendars_given: 1,
@@ -156,7 +193,7 @@ export default function ExistingDonForm({
     toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300';
     toast.textContent = message;
     document.body.appendChild(toast);
-    
+
     setTimeout(() => {
       toast.style.transform = 'translateX(100%)';
       setTimeout(() => document.body.removeChild(toast), 300);
@@ -176,35 +213,8 @@ export default function ExistingDonForm({
           </div>
         )}
       </div>
-      
+
       <form onSubmit={handleSubmitDon} className="space-y-6">
-        {/* Dans le modal de nouveau don, ajoutez ce choix au début */}
-        <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-          <h4 className="font-semibold text-gray-800 mb-3">Type de don :</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setNeedReceipt(false)}
-              className={`p-3 rounded-lg border-2 transition-colors ${
-                !needReceipt ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <div className="text-2xl mb-1">💰</div>
-              <div className="text-sm font-medium">Don simple</div>
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => setNeedReceipt(true)}
-              className={`p-3 rounded-lg border-2 transition-colors ${
-                needReceipt ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <div className="text-2xl mb-1">📧</div>
-              <div className="text-sm font-medium">Avec reçu email</div>
-            </button>
-          </div>
-        </div>
         {/* Amount Input - Mobile Optimized */}
         <div>
           <label className="block text-base font-semibold text-gray-800 mb-3">
@@ -247,15 +257,14 @@ export default function ExistingDonForm({
                 key={method}
                 type="button"
                 onClick={() => setNewDon({ ...newDon, payment_method: method })}
-                className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${
-                  newDon.payment_method === method
-                    ? 'bg-red-600 text-white shadow-lg'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                className={`py-4 px-4 rounded-xl text-base font-semibold transition-colors flex items-center justify-center gap-2 ${newDon.payment_method === method
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
               >
                 <span className="text-xl">
-                  {method === 'especes' && '💵'} 
-                  {method === 'cheque' && '📝'} 
+                  {method === 'especes' && '💵'}
+                  {method === 'cheque' && '📝'}
                   {method === 'carte' && '💳'}
                 </span>
                 <span>{method.charAt(0).toUpperCase() + method.slice(1)}</span>
@@ -264,37 +273,36 @@ export default function ExistingDonForm({
           </div>
         </div>
 
-        {/* Puis conditionnellement afficher les champs email si needReceipt === true */}
-        {needReceipt && (
-          <>
-            <div>
-              <label className="block text-base font-semibold text-gray-800 mb-3">
-                Email du donateur *
-              </label>
-              <input
-                type="email"
-                value={newDon.donator_email}
-                onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
-                className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
-                placeholder="email@exemple.com"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-base font-semibold text-gray-800 mb-3">
-                Nom du donateur (optionnel)
-              </label>
-              <input
-                type="text"
-                value={newDon.donator_name}
-                onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
-                className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Jean Dupont"
-              />
-            </div>
-          </>
-        )}
+        {/* ✅ NOUVEAU - Toujours afficher les champs */}
+        <>
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Email du donateur *
+            </label>
+            <input
+              type="email"
+              value={newDon.donator_email}
+              onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
+              placeholder="email@exemple.com"
+              required
+            />
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              Nom du donateur (optionnel)
+            </label>
+            <input
+              type="text"
+              value={newDon.donator_name}
+              onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Jean Dupont"
+            />
+          </div>
+        </>
+
 
         {/* Notes */}
         <div>

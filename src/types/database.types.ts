@@ -98,6 +98,10 @@ export type Database = {
           legal_text: string | null
           smtp_from_email: string | null
           smtp_from_name: string | null
+          smtp_host: string | null
+          smtp_password: string | null
+          smtp_port: number | null
+          smtp_user: string | null
           template_version: string | null
           updated_at: string | null
         }
@@ -113,6 +117,10 @@ export type Database = {
           legal_text?: string | null
           smtp_from_email?: string | null
           smtp_from_name?: string | null
+          smtp_host?: string | null
+          smtp_password?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
           template_version?: string | null
           updated_at?: string | null
         }
@@ -128,6 +136,10 @@ export type Database = {
           legal_text?: string | null
           smtp_from_email?: string | null
           smtp_from_name?: string | null
+          smtp_host?: string | null
+          smtp_password?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
           template_version?: string | null
           updated_at?: string | null
         }
@@ -704,9 +716,46 @@ export type Database = {
         Args: { p_calendars_remaining: number; p_tournee_id: string }
         Returns: boolean
       }
+      get_transaction_for_receipt: {
+        Args: { transaction_id: string }
+        Returns: {
+          amount: number
+          calendars_given: number
+          created_at: string
+          donator_email: string
+          donator_name: string
+          id: string
+          notes: string
+          payment_method: string
+          sapeur_name: string
+          team_id: string
+          team_name: string
+          user_id: string
+        }[]
+      }
+      get_user_role: {
+        Args: { user_id: string }
+        Returns: string
+      }
+      get_user_team: {
+        Args: { user_id: string }
+        Returns: string
+      }
+      is_chef_equipe: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
+      is_tresorier: {
+        Args: { user_id: string }
+        Returns: boolean
+      }
       start_new_tournee: {
         Args: { p_calendars_initial: number; p_user_id: string }
         Returns: string
+      }
+      update_receipt_number: {
+        Args: { receipt_num: string; transaction_id: string }
+        Returns: boolean
       }
       update_tournee_totals: {
         Args: { p_tournee_id: string }
