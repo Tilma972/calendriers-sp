@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import { CreditCard, Banknote, Receipt, User, MessageSquare, X, Check } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
 import { supabase } from '@/shared/lib/supabase';
@@ -20,18 +21,16 @@ interface NewTransactionData {
 type QuickAmountButton = {
   value: number;
   label: string;
-  popular?: boolean;
+  recommended?: boolean;
 };
 
-// Types pour les méthodes de paiement avec couleurs et icons
+// Types pour les méthodes de paiement avec design professionnel
 type PaymentMethodOption = {
   id: 'especes' | 'cheque' | 'carte';
   label: string;
-  icon: string;
-  bgColor: string;
-  textColor: string;
-  hoverColor: string;
+  icon: any;
   description: string;
+  accentColor: string;
 };
 
 interface ExistingDonFormProps {
@@ -52,7 +51,6 @@ export default function ExistingDonForm({
   const { user, profile } = useAuthStore();
   const { isOnline, addPendingTransaction } = useOfflineStore();
   const [submitInProgress, setSubmitInProgress] = useState(false);
-  const [needReceipt, setNeedReceipt] = useState(true);
   const [showQRCode, setShowQRCode] = useState(false);
 
   const [newDon, setNewDon] = useState<NewTransactionData>({
@@ -64,41 +62,36 @@ export default function ExistingDonForm({
     notes: '',
   });
 
-  // Configuration des boutons de saisie rapide
+  // Configuration professionnelle des montants
   const quickAmounts: QuickAmountButton[] = useMemo(() => [
-    { value: 5, label: '5€', popular: false },
-    { value: 10, label: '10€', popular: true },
-    { value: 20, label: '20€', popular: false },
+    { value: 5, label: '5€' },
+    { value: 10, label: '10€', recommended: true },
+    { value: 15, label: '15€' },
+    { value: 20, label: '20€' },
   ], []);
 
-  // Configuration des méthodes de paiement optimisée
+  // Configuration des modes de paiement - Design sobre
   const paymentMethods: PaymentMethodOption[] = useMemo(() => [
     {
       id: 'especes',
       label: 'Espèces',
-      icon: '💵',
-      bgColor: 'bg-green-600',
-      textColor: 'text-white',
-      hoverColor: 'hover:bg-green-700',
-      description: 'Paiement cash immédiat'
+      icon: Banknote,
+      description: 'Paiement cash immédiat',
+      accentColor: 'emerald'
     },
     {
       id: 'cheque',
       label: 'Chèque',
-      icon: '📝',
-      bgColor: 'bg-blue-600',
-      textColor: 'text-white', 
-      hoverColor: 'hover:bg-blue-700',
-      description: 'Chèque à l\'ordre des SP'
+      icon: Receipt,
+      description: 'À l\'ordre des Sapeurs-Pompiers',
+      accentColor: 'blue'
     },
     {
       id: 'carte',
-      label: 'Carte/QR',
-      icon: '💳📱',
-      bgColor: 'bg-red-600',
-      textColor: 'text-white',
-      hoverColor: 'hover:bg-red-700',
-      description: 'Paiement mobile sécurisé'
+      label: 'Carte bancaire',
+      icon: CreditCard,
+      description: 'Paiement sécurisé par QR',
+      accentColor: 'red'
     }
   ], []);
 
@@ -109,13 +102,13 @@ export default function ExistingDonForm({
     }
   }, []);
 
-  // Handler optimisé pour la sélection rapide du montant
+  // Handler optimisé pour la sélection rapide du montant (SANS calcul automatique calendriers)
   const handleQuickAmountSelect = useCallback((amount: number) => {
     triggerHapticFeedback();
     setNewDon(prev => ({
       ...prev,
-      amount,
-      calendars_given: Math.max(1, Math.floor(amount / 10)) // Auto-calcul calendriers
+      amount
+      // Pas de calcul automatique des calendriers - on garde la valeur existante
     }));
   }, [triggerHapticFeedback]);
 
@@ -123,13 +116,7 @@ export default function ExistingDonForm({
   const handlePaymentMethodSelect = useCallback((method: 'especes' | 'cheque' | 'carte') => {
     triggerHapticFeedback();
     setNewDon(prev => ({ ...prev, payment_method: method }));
-    
-    // Auto-affichage QR pour les paiements carte
-    if (method === 'carte') {
-      setShowQRCode(true);
-    } else {
-      setShowQRCode(false);
-    }
+    setShowQRCode(method === 'carte');
   }, [triggerHapticFeedback]);
 
   const handleSubmitDon = async (e: React.FormEvent) => {
@@ -158,7 +145,7 @@ export default function ExistingDonForm({
             notes: newDon.notes || null,
             status: 'pending'
           })
-          .select(); // ← AJOUTEZ CETTE LIGNE !
+          .select();
           
         console.log('🔥 Insertion terminée, error:', error);
         console.log('🔥 Data reçue:', data);
@@ -252,7 +239,32 @@ export default function ExistingDonForm({
 
     } catch (error) {
       console.log('💾 Erreur attrapée, mode offline...');
-      // ... resto du code offline
+      // Mode offline : sauvegarder localement
+      const offlineTransaction = {
+        id: `offline_${Date.now()}`,
+        user_id: user.id,
+        team_id: profile?.team_id,
+        tournee_id: tourneeActive.tournee_id,
+        amount: newDon.amount,
+        calendars_given: newDon.calendars_given,
+        payment_method: newDon.payment_method,
+        donator_name: newDon.donator_name || undefined,
+        donator_email: newDon.donator_email || undefined,
+        notes: newDon.notes || undefined,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        offline: true
+      };
+
+      addPendingTransaction(offlineTransaction);
+      
+      // Mise à jour optimiste même en offline
+      updateTourneeOptimistic({
+        amount: newDon.amount,
+        calendars_given: newDon.calendars_given
+      });
+
+      showSuccessToast('Don sauvegardé hors-ligne ! Sera synchronisé au retour du réseau.');
     }
 
     // ✅ MAINTENANT seulement on ferme le formulaire
@@ -262,10 +274,7 @@ export default function ExistingDonForm({
     setSubmitInProgress(false);
   };
 
-
-
   const resetForm = () => {
-    setNeedReceipt(true);
     setNewDon({
       amount: 10,
       calendars_given: 1,
@@ -288,192 +297,178 @@ export default function ExistingDonForm({
     }, 3000);
   };
 
+  const getAccentClasses = (color: string, isSelected: boolean) => {
+    const colors = {
+      emerald: isSelected 
+        ? 'border-emerald-500 bg-emerald-50 text-emerald-900' 
+        : 'border-gray-200 hover:border-emerald-300 bg-white text-gray-700',
+      blue: isSelected 
+        ? 'border-blue-500 bg-blue-50 text-blue-900' 
+        : 'border-gray-200 hover:border-blue-300 bg-white text-gray-700',
+      red: isSelected 
+        ? 'border-red-500 bg-red-50 text-red-900' 
+        : 'border-gray-200 hover:border-red-300 bg-white text-gray-700'
+    };
+    return colors[color as keyof typeof colors] || colors.emerald;
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 max-w-2xl mx-auto">
-      {/* Header optimisé */}
-      <div className="flex justify-between items-center mb-4 sm:mb-6">
-        <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-2">
-          <span className="text-2xl">💰</span>
-          <span>Nouveau don</span>
-        </h3>
-        {!isOnline && (
-          <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs sm:text-sm font-medium">
-            <span className="hidden sm:inline">Mode offline</span>
-            <span className="sm:hidden">📴</span>
-          </div>
-        )}
+    <div className="max-w-2xl mx-auto p-6">
+      {/* Header épuré */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-semibold text-gray-900">
+            Nouveau don
+          </h2>
+          {!isOnline && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm">
+              <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+              Hors ligne
+            </div>
+          )}
+        </div>
+        <p className="text-gray-600 text-sm">
+          Enregistrement d'un don pour la campagne calendriers 2025
+        </p>
       </div>
 
-      <form onSubmit={handleSubmitDon} className="space-y-4 sm:space-y-6">
+      <form onSubmit={handleSubmitDon} className="space-y-8">
         
-        {/* Saisie rapide du montant - NOUVEAU */}
-        <div>
-          <label className="block text-base font-semibold text-gray-800 mb-3">
-            Montant
-          </label>
+        {/* Section Montant - Design professionnel */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 font-semibold text-sm">1</span>
+            </div>
+            <label className="text-lg font-medium text-gray-900">
+              Montant du don
+            </label>
+          </div>
           
-          {/* Boutons de saisie rapide */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            {quickAmounts.map(({ value, label, popular }) => (
+          {/* Boutons montants - Style sobre */}
+          <div className="grid grid-cols-4 gap-3 mb-4">
+            {quickAmounts.map(({ value, label, recommended }) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => handleQuickAmountSelect(value)}
-                className={`relative py-3 px-4 rounded-xl text-base font-semibold transition-all duration-200 
-                  transform active:scale-95 ${
+                className={`relative p-4 border-2 rounded-xl font-medium transition-all duration-200 ${
                   newDon.amount === value
-                    ? 'bg-red-600 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:scale-102'
-                } ${popular ? 'ring-2 ring-red-200' : ''}`}
-                aria-label={`Sélectionner ${label}`}
+                    ? 'border-gray-900 bg-gray-900 text-white shadow-lg'
+                    : 'border-gray-200 hover:border-gray-300 bg-white text-gray-700 hover:shadow-md'
+                }`}
               >
                 {label}
-                {popular && (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></div>
+                {recommended && (
+                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs font-bold">!</span>
+                  </div>
+                )}
+                {newDon.amount === value && (
+                  <Check className="absolute -top-2 -right-2 w-5 h-5 text-gray-900 bg-white rounded-full p-1" />
                 )}
               </button>
             ))}
           </div>
 
-          {/* Champ montant libre */}
+          {/* Saisie libre - Design épuré */}
           <div className="relative">
             <input
               type="number"
               step="1"
               value={newDon.amount}
-              onChange={(e) => setNewDon({ ...newDon, amount: parseFloat(e.target.value) || 0 })}
-              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
-              placeholder="Ou saisissez un montant"
+              onChange={(e) => setNewDon(prev => ({ 
+                ...prev, 
+                amount: parseFloat(e.target.value) || 0 
+              }))}
+              className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-gray-900 focus:outline-none transition-colors bg-white"
+              placeholder="Montant personnalisé"
               required
-              aria-label="Montant personnalisé"
             />
-            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-lg">
+            <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
               €
             </div>
           </div>
         </div>
 
-        {/* Calendriers - Interface simplifiée */}
-        <div>
-          <label className="block text-base font-semibold text-gray-800 mb-3">
-            Calendriers
-          </label>
-          <div className="flex items-center gap-3">
-            <select
-              value={newDon.calendars_given}
-              onChange={(e) => setNewDon({ ...newDon, calendars_given: parseInt(e.target.value) })}
-              className="flex-1 px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500"
-              aria-label="Nombre de calendriers"
-            >
-              {[1, 2, 3, 4, 5].map(num => (
-                <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
-              ))}
-            </select>
-            <div className="text-sm text-gray-500 min-w-max">
-              ≈ {newDon.amount}€ total
-            </div>
-          </div>
-        </div>
-
-        {/* Modes de paiement - Interface optimisée 3 boutons */}
-        <div>
-          <label className="block text-base font-semibold text-gray-800 mb-3">
-            Mode de paiement
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {paymentMethods.map((method) => (
-              <button
-                key={method.id}
-                type="button"
-                onClick={() => handlePaymentMethodSelect(method.id)}
-                className={`relative py-4 px-4 rounded-xl text-base font-semibold transition-all duration-200 
-                  transform active:scale-95 flex flex-col items-center gap-2 min-h-[80px]
-                  ${newDon.payment_method === method.id
-                    ? `${method.bgColor} ${method.textColor} shadow-lg scale-105`
-                    : `bg-gray-100 text-gray-700 hover:bg-gray-200 ${method.hoverColor} hover:scale-102`
-                  }`}
-                aria-label={`Payer par ${method.label} - ${method.description}`}
-              >
-                <span className="text-xl sm:text-2xl">{method.icon}</span>
-                <span className="text-sm sm:text-base">{method.label}</span>
-                {newDon.payment_method === method.id && (
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-white text-green-600 rounded-full flex items-center justify-center text-xs">
-                    ✓
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-          
-          {/* Description du mode sélectionné */}
-          <div className="mt-2 text-sm text-gray-600 text-center">
-            {paymentMethods.find(m => m.id === newDon.payment_method)?.description}
-          </div>
-        </div>
-
-        {/* Informations donateur - Interface condensée */}
+        {/* Section Calendriers - Contrôle manuel */}
         <div className="space-y-4">
-          <h4 className="text-base font-semibold text-gray-800 flex items-center gap-2">
-            <span>👤</span>
-            <span>Informations donateur</span>
-            <span className="text-sm font-normal text-gray-500">(optionnel)</span>
-          </h4>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <input
-                type="email"
-                value={newDon.donator_email}
-                onChange={(e) => setNewDon({ ...newDon, donator_email: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="Email (pour reçu)"
-                aria-label="Email du donateur"
-              />
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 font-semibold text-sm">2</span>
             </div>
-            
-            <div>
-              <input
-                type="text"
-                value={newDon.donator_name}
-                onChange={(e) => setNewDon({ ...newDon, donator_name: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                placeholder="Nom complet"
-                aria-label="Nom du donateur"
-              />
+            <label className="text-lg font-medium text-gray-900">
+              Nombre de calendriers
+            </label>
+          </div>
+
+          <select
+            value={newDon.calendars_given}
+            onChange={(e) => setNewDon(prev => ({ ...prev, calendars_given: parseInt(e.target.value) }))}
+            className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-gray-900 focus:outline-none transition-colors bg-white"
+            aria-label="Nombre de calendriers"
+          >
+            {[1, 2, 3, 4, 5].map(num => (
+              <option key={num} value={num}>{num} calendrier{num > 1 ? 's' : ''}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Section Mode de paiement */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 font-semibold text-sm">3</span>
             </div>
+            <label className="text-lg font-medium text-gray-900">
+              Mode de paiement
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {paymentMethods.map((method) => {
+              const Icon = method.icon;
+              const isSelected = newDon.payment_method === method.id;
+              
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  onClick={() => handlePaymentMethodSelect(method.id)}
+                  className={`p-4 border-2 rounded-xl transition-all duration-200 text-left ${
+                    getAccentClasses(method.accentColor, isSelected)
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Icon className="w-5 h-5 mt-1 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium mb-1">{method.label}</div>
+                      <div className="text-sm opacity-75">{method.description}</div>
+                    </div>
+                    {isSelected && (
+                      <Check className="w-5 h-5 flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Notes - Interface compacte */}
-        <div>
-          <label className="block text-base font-semibold text-gray-800 mb-2">
-            Notes
-          </label>
-          <textarea
-            value={newDon.notes}
-            onChange={(e) => setNewDon({ ...newDon, notes: e.target.value })}
-            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none transition-all"
-            rows={2}
-            placeholder="Informations complémentaires..."
-            aria-label="Notes sur le don"
-          />
-        </div>
-
-        {/* QR Code intégré - NOUVEAU */}
+        {/* QR Code Section - Intégrée */}
         {showQRCode && profile?.team_id && (
-          <div className="border-2 border-red-200 bg-red-50 rounded-2xl p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-lg font-bold text-red-900 flex items-center gap-2">
-                <span>📱</span>
-                <span>Paiement QR Code</span>
-              </h4>
+          <div className="border-2 border-gray-200 rounded-xl p-6 bg-gray-50">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Paiement par carte
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowQRCode(false)}
-                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-100 rounded-lg transition-colors"
-                aria-label="Fermer le QR Code"
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
             
@@ -481,8 +476,6 @@ export default function ExistingDonForm({
               teamId={profile.team_id}
               teamName={tourneeActive?.team_name || 'Votre équipe'}
               teamColor={tourneeActive?.team_color || '#dc2626'}
-              suggestedAmount={newDon.amount}
-              calendarsCount={newDon.calendars_given}
               onSuccess={(transactionId) => {
                 console.log('✅ QR Payment completed:', transactionId);
                 triggerHapticFeedback();
@@ -506,34 +499,95 @@ export default function ExistingDonForm({
                 console.log('⏰ QR Code expired');
                 setShowQRCode(false);
               }}
-              className="bg-white shadow-sm"
+              className="bg-white shadow-sm rounded-lg p-8 text-center"
             />
           </div>
         )}
 
-        {/* Notice mode offline - Optimisée */}
+        {/* Section Informations donateur - Optionnelle */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 font-semibold text-sm">4</span>
+            </div>
+            <label className="text-lg font-medium text-gray-900">
+              Informations donateur
+            </label>
+            <span className="text-sm text-gray-500">(optionnel)</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Email</label>
+              <input
+                type="email"
+                value={newDon.donator_email}
+                onChange={(e) => setNewDon(prev => ({ 
+                  ...prev, 
+                  donator_email: e.target.value 
+                }))}
+                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors"
+                placeholder="email@exemple.com"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Nom complet</label>
+              <input
+                type="text"
+                value={newDon.donator_name}
+                onChange={(e) => setNewDon(prev => ({ 
+                  ...prev, 
+                  donator_name: e.target.value 
+                }))}
+                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors"
+                placeholder="Prénom Nom"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-gray-600" />
+            <label className="text-lg font-medium text-gray-900">
+              Notes
+            </label>
+            <span className="text-sm text-gray-500">(optionnel)</span>
+          </div>
+
+          <textarea
+            value={newDon.notes}
+            onChange={(e) => setNewDon(prev => ({ ...prev, notes: e.target.value }))}
+            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors resize-none"
+            rows={3}
+            placeholder="Informations complémentaires..."
+          />
+        </div>
+
+        {/* Notice offline - Discrète */}
         {!isOnline && (
-          <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <span className="text-orange-600 text-lg">📴</span>
-              <div className="flex-1">
-                <div className="font-semibold text-orange-800 text-sm">Mode hors-ligne</div>
-                <div className="text-xs text-orange-700 mt-1">
-                  Ce don sera sauvegardé localement et synchronisé au retour du réseau.
+              <div className="w-5 h-5 bg-amber-500 rounded-full flex-shrink-0 mt-0.5"></div>
+              <div>
+                <div className="font-medium text-amber-800 text-sm">Mode hors ligne</div>
+                <div className="text-amber-700 text-xs mt-1">
+                  Ce don sera synchronisé automatiquement au retour du réseau.
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Boutons d'action - Interface améliorée */}
+        {/* Actions - Épurées */}
         {!showQRCode && (
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={onCancel}
-              className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-95 text-base sm:text-lg"
-              aria-label="Annuler ce don"
+              className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
             >
               Annuler
             </button>
@@ -541,138 +595,30 @@ export default function ExistingDonForm({
             <button
               type="submit"
               disabled={submitInProgress}
-              className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-xl transition-all duration-200 transform active:scale-95 flex items-center justify-center gap-3 text-base sm:text-lg shadow-lg"
-              aria-label={`Enregistrer don de ${newDon.amount}€`}
+              className="flex-1 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {submitInProgress && (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
               <span>
                 {submitInProgress 
-                  ? 'Traitement...' 
-                  : isOnline 
-                    ? `Enregistrer ${newDon.amount}€` 
-                    : 'Sauver offline'
+                  ? 'Enregistrement...' 
+                  : `Enregistrer le don de ${newDon.amount}€`
                 }
               </span>
             </button>
           </div>
         )}
 
-        {/* Info rapide sur le mode carte/QR */}
+        {/* Info pour mode carte - Subtile */}
         {newDon.payment_method === 'carte' && !showQRCode && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-            <div className="text-sm text-blue-800">
-              <span className="font-semibold">💡 Astuce :</span> Le QR code s'affichera automatiquement pour ce mode de paiement
-            </div>
+          <div className="text-center p-3 bg-blue-50 rounded-lg">
+            <p className="text-sm text-blue-800">
+              Le QR code s'affichera automatiquement pour ce mode de paiement
+            </p>
           </div>
         )}
       </form>
     </div>
   );
-}
-
-// Styles CSS personnalisés pour les micro-interactions
-const customStyles = `
-  .hover\\:scale-102:hover {
-    transform: scale(1.02);
-  }
-  
-  .scale-105 {
-    transform: scale(1.05);
-  }
-  
-  @keyframes pulse-success {
-    0%, 100% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 0.8;
-      transform: scale(1.05);
-    }
-  }
-  
-  .animate-pulse-success {
-    animation: pulse-success 0.6s ease-in-out;
-  }
-  
-  @keyframes shimmer {
-    0% {
-      background-position: -200px 0;
-    }
-    100% {
-      background-position: calc(200px + 100%) 0;
-    }
-  }
-  
-  .shimmer-effect {
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.4) 50%,
-      transparent 100%
-    );
-    background-size: 200px 100%;
-    animation: shimmer 2s infinite;
-  }
-  
-  /* Smooth transitions pour tous les éléments interactifs */
-  .transition-all {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  /* Focus states améliorés pour l'accessibilité */
-  .focus\\:ring-2:focus {
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-    outline: none;
-  }
-  
-  /* Boutons avec feedback visuel amélioré */
-  .btn-payment {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .btn-payment::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.3s, height 0.3s;
-  }
-  
-  .btn-payment:active::before {
-    width: 300px;
-    height: 300px;
-  }
-  
-  /* Responsive grid amélioré */
-  @media (max-width: 640px) {
-    .payment-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-  
-  @media (min-width: 641px) {
-    .payment-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
-`;
-
-// Injection des styles dans le document (uniquement côté client)
-if (typeof document !== 'undefined') {
-  const existingStyle = document.getElementById('existing-don-form-styles');
-  if (!existingStyle) {
-    const styleSheet = document.createElement('style');
-    styleSheet.id = 'existing-don-form-styles';
-    styleSheet.textContent = customStyles;
-    document.head.appendChild(styleSheet);
-  }
 }
