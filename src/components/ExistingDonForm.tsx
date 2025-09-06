@@ -354,7 +354,7 @@ export default function ExistingDonForm({
                 onClick={() => handleQuickAmountSelect(value)}
                 className={`relative p-4 border-2 rounded-xl font-medium transition-all duration-200 ${
                   newDon.amount === value
-                    ? 'border-gray-900 bg-gray-900 text-white shadow-lg'
+                    ? 'border-red-500 bg-red-500 text-white shadow-lg'
                     : 'border-gray-200 hover:border-gray-300 bg-white text-gray-700 hover:shadow-md'
                 }`}
               >
@@ -365,7 +365,7 @@ export default function ExistingDonForm({
                   </div>
                 )}
                 {newDon.amount === value && (
-                  <Check className="absolute -top-2 -right-2 w-5 h-5 text-gray-900 bg-white rounded-full p-1" />
+                  <Check className="absolute -top-2 -right-2 w-5 h-5 text-red-600 bg-white rounded-full p-1" />
                 )}
               </button>
             ))}
@@ -381,7 +381,7 @@ export default function ExistingDonForm({
                 ...prev, 
                 amount: parseFloat(e.target.value) || 0 
               }))}
-              className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-gray-900 focus:outline-none transition-colors bg-white"
+              className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none transition-colors bg-white"
               placeholder="Montant personnalisé"
               required
             />
@@ -405,7 +405,7 @@ export default function ExistingDonForm({
           <select
             value={newDon.calendars_given}
             onChange={(e) => setNewDon(prev => ({ ...prev, calendars_given: parseInt(e.target.value) }))}
-            className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-gray-900 focus:outline-none transition-colors bg-white"
+            className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-red-500 focus:outline-none transition-colors bg-white"
             aria-label="Nombre de calendriers"
           >
             {[1, 2, 3, 4, 5].map(num => (
@@ -526,7 +526,7 @@ export default function ExistingDonForm({
                   ...prev, 
                   donator_email: e.target.value 
                 }))}
-                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors"
+                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none transition-colors"
                 placeholder="email@exemple.com"
               />
             </div>
@@ -540,7 +540,7 @@ export default function ExistingDonForm({
                   ...prev, 
                   donator_name: e.target.value 
                 }))}
-                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors"
+                className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none transition-colors"
                 placeholder="Prénom Nom"
               />
             </div>
@@ -560,7 +560,7 @@ export default function ExistingDonForm({
           <textarea
             value={newDon.notes}
             onChange={(e) => setNewDon(prev => ({ ...prev, notes: e.target.value }))}
-            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors resize-none"
+            className="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none transition-colors resize-none"
             rows={3}
             placeholder="Informations complémentaires..."
           />
@@ -595,7 +595,7 @@ export default function ExistingDonForm({
             <button
               type="submit"
               disabled={submitInProgress}
-              className="flex-1 px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-3 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
             >
               {submitInProgress && (
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
