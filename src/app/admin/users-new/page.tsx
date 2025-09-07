@@ -19,13 +19,6 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AdminTableFilters } from '@/components/ui/admin/AdminTable';
 import { adminTheme, getRoleStyle } from '@/components/ui/admin/admin-theme';
-import { 
-  Users, 
-  Pause, 
-  DollarSign,
-  Shield,
-  UserCheck
-} from 'lucide-react';
 
 interface User {
   id: string;
@@ -398,7 +391,7 @@ export default function AdminUsersPageNew() {
       <AdminPageHeader
         title="Gestion Utilisateurs"
         subtitle="Création et gestion des comptes utilisateur"
-        icon={<Users className="w-6 h-6" />}
+        icon="👥"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Utilisateurs' }
@@ -421,35 +414,35 @@ export default function AdminUsersPageNew() {
             <AdminStatCard
               title="Total"
               value={stats.total}
-              icon={<Users className="w-8 h-8" />}
+              icon="👥"
               subtitle={`${stats.active} actifs`}
               onClick={() => setFilterStatus('all')}
             />
             <AdminStatCard
               title="Sapeurs"
               value={stats.sapeurs}
-              icon={<UserCheck className="w-8 h-8" />}
+              icon="🧑‍🚒"
               subtitle="Collecteurs"
               onClick={() => setFilterRole('sapeur')}
             />
             <AdminStatCard
               title="Chefs d'équipe"
               value={stats.chefs}
-              icon={<Shield className="w-8 h-8" />}
+              icon="👨‍💼"
               subtitle="Responsables"
               onClick={() => setFilterRole('chef_equipe')}
             />
             <AdminStatCard
               title="Trésoriers"
               value={stats.tresoriers}
-              icon={<DollarSign className="w-8 h-8" />}
+              icon="💰"
               subtitle="Gestionnaires"
               onClick={() => setFilterRole('tresorier')}
             />
             <AdminStatCard
               title="Inactifs"
               value={stats.total - stats.active}
-              icon={<Pause className="w-8 h-8" />}
+              icon="⏸️"
               subtitle="Désactivés"
               onClick={() => setFilterStatus('inactive')}
             />
@@ -532,7 +525,7 @@ export default function AdminUsersPageNew() {
             data={filteredUsers}
             isLoading={isLoading}
             emptyMessage="Aucun utilisateur trouvé avec ces critères"
-            emptyIcon={<Users className="w-16 h-16" />}
+            emptyIcon="👥"
             rowKey="id"
           />
         </AdminSection>

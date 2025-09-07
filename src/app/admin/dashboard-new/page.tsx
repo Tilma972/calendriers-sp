@@ -16,18 +16,6 @@ import {
 } from '@/components/ui/admin';
 import { Button } from '@/components/ui/Button';
 import { adminClassNames, createStatusBadge } from '@/components/ui/admin/admin-theme';
-import { 
-  BarChart3, 
-  Users, 
-  Building2, 
-  DollarSign, 
-  Clock, 
-  Zap,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  RefreshCw
-} from 'lucide-react';
 
 interface AdminStats {
   users_total: number;
@@ -158,7 +146,7 @@ export default function AdminDashboardNew() {
       <AdminPageHeader
         title="Dashboard"
         subtitle="Vue d'ensemble de l'administration"
-        icon={<BarChart3 className="w-6 h-6" />}
+        icon="📊"
         breadcrumbs={[
           { label: 'Administration' },
           { label: 'Dashboard' }
@@ -169,7 +157,9 @@ export default function AdminDashboardNew() {
             size="sm"
             onClick={loadAdminData}
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
             Actualiser
           </Button>
         }
@@ -183,7 +173,7 @@ export default function AdminDashboardNew() {
               <AdminStatCard
                 title="Utilisateurs"
                 value={stats.users_total}
-                icon={<Users className="w-8 h-8" />}
+                icon="👥"
                 subtitle={`${stats.users_active} actifs`}
                 trend={{ 
                   value: Math.round((stats.users_active / stats.users_total) * 100), 
@@ -195,7 +185,7 @@ export default function AdminDashboardNew() {
               <AdminStatCard
                 title="Équipes"
                 value={stats.teams_total}
-                icon={<Building2 className="w-8 h-8" />}
+                icon="🏢"
                 subtitle={`${stats.teams_active} avec chef`}
                 trend={{ 
                   value: stats.teams_without_chef, 
@@ -207,7 +197,7 @@ export default function AdminDashboardNew() {
               <AdminStatCard
                 title="Dons Aujourd'hui"
                 value={stats.transactions_today}
-                icon={<DollarSign className="w-8 h-8" />}
+                icon="💰"
                 subtitle={`${stats.amount_today.toFixed(2)}€ collectés`}
                 onClick={() => window.location.href = '/admin/transactions'}
               />
@@ -215,7 +205,7 @@ export default function AdminDashboardNew() {
               <AdminStatCard
                 title="En Attente"
                 value={stats.transactions_pending}
-                icon={<Clock className="w-8 h-8" />}
+                icon="⏳"
                 subtitle="Validations requises"
                 trend={stats.transactions_pending > 0 ? { 
                   value: stats.transactions_pending, 
@@ -234,7 +224,7 @@ export default function AdminDashboardNew() {
             <AdminCard
               title="Actions Rapides"
               subtitle="Raccourcis administrateur"
-              icon={<Zap className="w-6 h-6" />}
+              icon="⚡"
             >
               <div className="space-y-3">
                 <Link
@@ -242,7 +232,9 @@ export default function AdminDashboardNew() {
                   className="flex items-center gap-3 p-4 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 hover:border-gray-300"
                 >
                   <div className="p-2 bg-blue-50 rounded-lg text-blue-600">
-                    <Users className="w-5 h-5" />
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                    </svg>
                   </div>
                   <div>
                     <div className="font-medium">Gérer les Utilisateurs</div>
@@ -255,7 +247,9 @@ export default function AdminDashboardNew() {
                   className="flex items-center gap-3 p-4 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 hover:border-gray-300"
                 >
                   <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-                    <Building2 className="w-5 h-5" />
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
                   </div>
                   <div>
                     <div className="font-medium">Gérer les Équipes</div>
@@ -269,7 +263,9 @@ export default function AdminDashboardNew() {
                     className="flex items-center gap-3 p-4 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-200"
                   >
                     <div className="p-2 bg-red-100 rounded-lg text-red-600">
-                      <CheckCircle className="w-5 h-5" />
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                     </div>
                     <div>
                       <div className="font-medium text-red-800">Valider Transactions</div>
@@ -286,14 +282,14 @@ export default function AdminDashboardNew() {
             <AdminCard
               title="Activité Récente"
               subtitle="Dernières actions sur la plateforme"
-              icon={<TrendingUp className="w-6 h-6" />}
+              icon="📈"
             >
               <div className="space-y-3">
                 {recentActivity.length > 0 ? (
                   recentActivity.map((activity) => (
                     <div key={activity.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg">
                       <div className="p-2 bg-green-50 rounded-full text-green-600">
-                        <DollarSign className="w-4 h-4" />
+                        💰
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-900 truncate">
@@ -312,9 +308,7 @@ export default function AdminDashboardNew() {
                   ))
                 ) : (
                   <div className="text-center py-8 text-gray-500">
-                    <div className="text-4xl mb-2">
-                      <BarChart3 className="w-16 h-16 mx-auto text-gray-300" />
-                    </div>
+                    <div className="text-4xl mb-2">📊</div>
                     <p>Aucune activité récente</p>
                   </div>
                 )}
@@ -330,7 +324,7 @@ export default function AdminDashboardNew() {
               {stats.teams_without_chef > 0 && (
                 <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-lg">
                   <div className="p-2 bg-orange-100 rounded-lg text-orange-600 text-xl">
-                    <AlertTriangle className="w-6 h-6" />
+                    ⚠️
                   </div>
                   <div className="flex-1">
                     <div className="font-medium text-orange-800">
@@ -352,7 +346,7 @@ export default function AdminDashboardNew() {
               {stats.transactions_pending === 0 && stats.transactions_today > 0 && (
                 <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <div className="p-2 bg-green-100 rounded-lg text-green-600 text-xl">
-                    <CheckCircle className="w-6 h-6" />
+                    ✅
                   </div>
                   <div>
                     <div className="font-medium text-green-800">
@@ -368,7 +362,7 @@ export default function AdminDashboardNew() {
               {(!stats.transactions_today || stats.transactions_today === 0) && (
                 <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="p-2 bg-blue-100 rounded-lg text-blue-600 text-xl">
-                    <BarChart3 className="w-6 h-6" />
+                    📊
                   </div>
                   <div>
                     <div className="font-medium text-blue-800">

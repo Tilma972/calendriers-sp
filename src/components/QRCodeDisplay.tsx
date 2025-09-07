@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import { useAuthStore } from '@/shared/stores/auth';
 import { supabase } from '@/shared/lib/supabase';
 import { Loader2, RefreshCw, QrCode, Clock, CheckCircle, XCircle, Smartphone } from 'lucide-react';
+import { playPaymentSuccess, playPaymentError, playNotification } from '@/utils/sounds';
 
 interface QRCodeDisplayProps {
   teamId: string;
@@ -117,6 +118,7 @@ export default function QRCodeDisplay({
       console.error('Error generating QR code:', err);
       setError(err.message || 'Erreur lors de la génération du QR code');
       setStatus('error');
+      playPaymentError();
     }
   };
 
@@ -131,6 +133,7 @@ export default function QRCodeDisplay({
 
       if (remaining === 0) {
         setStatus('expired');
+        playNotification();
         onExpired?.();
         if (countdownTimer.current) {
           clearInterval(countdownTimer.current);
@@ -163,6 +166,9 @@ export default function QRCodeDisplay({
         if (data?.status === 'completed') {
           setStatus('completed');
           setQrInteraction(prev => prev ? { ...prev, ...data } : null);
+          
+          // Jouer le son de succès
+          playPaymentSuccess();
           
           if (statusCheckTimer.current) {
             clearInterval(statusCheckTimer.current);
@@ -198,6 +204,9 @@ export default function QRCodeDisplay({
             donator_name: payload.payload.donatorName,
             donator_email: payload.payload.donatorEmail
           } : null);
+          
+          // Jouer le son de succès
+          playPaymentSuccess();
           
           // Arrêter le monitoring
           if (statusCheckTimer.current) {

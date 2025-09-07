@@ -13,11 +13,6 @@ import {
   AdminCard
 } from '@/components/ui/admin';
 import { Button } from '@/components/ui/Button';
-import { 
-  Building2, 
-  UserCheck, 
-  AlertTriangle 
-} from 'lucide-react';
 
 interface Team {
   id: string;
@@ -86,13 +81,17 @@ export default function AdminTeamsPageNew() {
       <AdminPageHeader
         title="Gestion Équipes"
         subtitle="Organisation et configuration des équipes"
-        icon={<Building2 className="w-6 h-6" />}
+        icon="🏢"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Équipes' }
         ]}
         actions={
-          <Button variant="primary" size="sm">
+          <Button 
+            variant="primary" 
+            size="sm"
+            onClick={() => console.log('Créer nouvelle équipe')}
+          >
             Nouvelle Équipe
           </Button>
         }
@@ -105,19 +104,19 @@ export default function AdminTeamsPageNew() {
             <AdminStatCard
               title="Total Équipes"
               value={stats.total}
-              icon={<Building2 className="w-8 h-8" />}
+              icon="🏢"
               subtitle="Équipes créées"
             />
             <AdminStatCard
               title="Avec Chef"
               value={stats.withChef}
-              icon={<UserCheck className="w-8 h-8" />}
+              icon="👨‍💼"
               subtitle="Équipes dirigées"
             />
             <AdminStatCard
               title="Sans Chef"
               value={stats.withoutChef}
-              icon={<AlertTriangle className="w-8 h-8" />}
+              icon="⚠️"
               subtitle="À assigner"
             />
           </AdminGrid>
@@ -131,9 +130,13 @@ export default function AdminTeamsPageNew() {
                 key={team.id}
                 title={team.name}
                 subtitle={team.chef_name ? `Chef: ${team.chef_name}` : 'Aucun chef assigné'}
-                icon={<Building2 className="w-6 h-6" />}
+                icon="🏢"
                 headerAction={
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => console.log('Modifier équipe:', team.id)}
+                  >
                     Modifier
                   </Button>
                 }
@@ -159,6 +162,7 @@ export default function AdminTeamsPageNew() {
                       variant="secondary"
                       size="sm"
                       className="w-full"
+                      onClick={() => console.log('Voir membres équipe:', team.id)}
                     >
                       Voir les membres
                     </Button>
@@ -173,11 +177,13 @@ export default function AdminTeamsPageNew() {
         {teams.length === 0 && (
           <AdminSection>
             <div className="text-center py-12">
-              <div className="mb-4">
-                <Building2 className="w-24 h-24 mx-auto text-gray-300" />
-              </div>
+              <div className="text-6xl mb-4 text-gray-300">🏢</div>
               <p className="text-gray-500">Aucune équipe configurée</p>
-              <Button variant="primary" className="mt-4">
+              <Button 
+                variant="primary" 
+                className="mt-4"
+                onClick={() => console.log('Créer première équipe')}
+              >
                 Créer la première équipe
               </Button>
             </div>

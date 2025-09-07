@@ -19,16 +19,6 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AdminTableFilters } from '@/components/ui/admin/AdminTable';
 import { adminTheme, createStatusBadge, getPaymentStyle } from '@/components/ui/admin/admin-theme';
-import { 
-  CreditCard, 
-  Clock, 
-  Users, 
-  CheckCircle, 
-  DollarSign,
-  Eye,
-  Check,
-  X
-} from 'lucide-react';
 
 interface Transaction {
   id: string;
@@ -484,7 +474,7 @@ export default function AdminTransactionsPageNew() {
             className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
             title="Voir détails"
           >
-            <Eye className="w-4 h-4" />
+            👁️
           </button>
 
           {(row.status === 'pending' || row.status === 'validated_team') && (
@@ -497,7 +487,7 @@ export default function AdminTransactionsPageNew() {
                 className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-colors"
                 title="Valider"
               >
-                <Check className="w-4 h-4" />
+                ✅
               </button>
               <button
                 onClick={(e) => {
@@ -507,7 +497,7 @@ export default function AdminTransactionsPageNew() {
                 className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
                 title="Rejeter"
               >
-                <X className="w-4 h-4" />
+                ❌
               </button>
             </>
           )}
@@ -521,7 +511,7 @@ export default function AdminTransactionsPageNew() {
       <AdminPageHeader
         title="Validation Transactions"
         subtitle="Gestion et validation des transactions"
-        icon={<CreditCard className="w-6 h-6" />}
+        icon="💳"
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Transactions' }
@@ -564,28 +554,28 @@ export default function AdminTransactionsPageNew() {
             <AdminStatCard
               title="En attente"
               value={stats.pending}
-              icon={<Clock className="w-8 h-8" />}
+              icon="⏳"
               subtitle="À valider"
               onClick={() => setStatusFilter('pending')}
             />
             <AdminStatCard
               title="Validées équipe"
               value={stats.validated_team}
-              icon={<Users className="w-8 h-8" />}
+              icon="👥"
               subtitle="En attente admin"
               onClick={() => setStatusFilter('validated_team')}
             />
             <AdminStatCard
               title="Validées final"
               value={stats.validated_tresorier}
-              icon={<CheckCircle className="w-8 h-8" />}
+              icon="✅"
               subtitle="Terminées"
               onClick={() => setStatusFilter('validated_tresorier')}
             />
             <AdminStatCard
               title="Montant validé"
               value={`${stats.total_amount.toFixed(2)}€`}
-              icon={<DollarSign className="w-8 h-8" />}
+              icon="💰"
               subtitle="Total confirmé"
             />
           </AdminGrid>
@@ -673,7 +663,7 @@ export default function AdminTransactionsPageNew() {
             onSelectAll={handleSelectAll}
             onRowClick={(row) => setShowDetailModal(row.id)}
             emptyMessage="Aucune transaction trouvée avec ces critères"
-            emptyIcon={<CreditCard className="w-16 h-16" />}
+            emptyIcon="💳"
             rowKey="id"
           />
         </AdminSection>
