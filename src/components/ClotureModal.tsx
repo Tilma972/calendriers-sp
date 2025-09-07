@@ -4,6 +4,20 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
+import { Button, Card, CardHeader, CardBody, Input, Badge } from '@/components/ui';
+import { 
+  Home, 
+  X, 
+  BarChart3, 
+  CreditCard, 
+  ClipboardList, 
+  Banknote, 
+  Calendar, 
+  Trophy,
+  Smartphone,
+  Check,
+  ChevronDown
+} from 'lucide-react';
 import DonsDetailsList from './DonsDetailsList';
 
 interface ClotureModalProps {
@@ -30,12 +44,12 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
 
     // Validation basique
     if (!formData.totalEspeces || parseFloat(formData.totalEspeces) <= 0) {
-      alert('⚠️ Veuillez saisir un montant en espèces');
+      alert('Veuillez saisir un montant en espèces');
       return;
     }
 
     if (!formData.calendarsVendus || parseInt(formData.calendarsVendus) <= 0) {
-      alert('⚠️ Veuillez indiquer le nombre de calendriers vendus');
+      alert('Veuillez indiquer le nombre de calendriers vendus');
       return;
     }
 
@@ -64,7 +78,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
           throw new Error(result.error || 'Erreur lors de la clôture');
         }
 
-        showSuccessToast('🎉 Tournée clôturée avec succès !');
+        showSuccessToast('Tournée clôturée avec succès !');
         onSuccess();
 
       } else {
@@ -95,13 +109,13 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
           });
         });
 
-        showSuccessToast('💾 Tournée sauvegardée hors-ligne !');
+        showSuccessToast('Tournée sauvegardée hors-ligne !');
         onSuccess();
       }
 
     } catch (error) {
       console.error('Erreur clôture tournée:', error);
-      alert('❌ Erreur lors de la clôture: ' + (error as Error).message);
+      alert('Erreur lors de la clôture: ' + (error as Error).message);
     } finally {
       setSubmitInProgress(false);
     }
@@ -124,164 +138,207 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-40 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 z-40 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
         
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <span className="text-3xl">🏠</span>
-            <span>Clôture de tournée</span>
-          </h2>
+        {/* Header professionnel */}
+        <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+              <Home className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Clôture de tournée
+              </h2>
+              <p className="text-sm text-gray-600">
+                Finaliser les collectes de la journée
+              </p>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none"
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            ×
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          {/* Section obligatoire - 30 secondes */}
-          <div className="section-rapide bg-red-50 border-2 border-red-100 rounded-xl p-5 mb-6">
-            <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center gap-2">
-              <span className="text-xl">📊</span>
-              <span>Totaux (obligatoire)</span>
-            </h3>
+          {/* Section obligatoire */}
+          <Card className="bg-red-50 border-2 border-red-200 mb-6">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-red-600" />
+                <h3 className="text-lg font-semibold text-red-800">
+                  Totaux (obligatoire)
+                </h3>
+              </div>
+            </CardHeader>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Total espèces collectées (€) *
-                </label>
-                <input 
-                  type="number"
-                  step="1"
-                  min="0"
-                  placeholder="0"
-                  value={formData.totalEspeces}
-                  onChange={(e) => setFormData({...formData, totalEspeces: e.target.value})}
-                  className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
-                  required
-                />
+            <CardBody>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Input
+                    label="Total espèces collectées (€) *"
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="0"
+                    value={formData.totalEspeces}
+                    onChange={(e) => setFormData({...formData, totalEspeces: e.target.value})}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <Input
+                    label="Nombre de calendriers vendus *"
+                    type="number"
+                    min="1"
+                    placeholder="0"
+                    value={formData.calendarsVendus}
+                    onChange={(e) => setFormData({...formData, calendarsVendus: e.target.value})}
+                    required
+                  />
+                </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Nombre de calendriers vendus *
-                </label>
-                <input 
-                  type="number"
-                  min="1"
-                  placeholder="0"
-                  value={formData.calendarsVendus}
-                  onChange={(e) => setFormData({...formData, calendarsVendus: e.target.value})}
-                  className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:ring-red-500 focus:border-red-500"
-                  required
-                />
-              </div>
-            </div>
-          </div>
+            </CardBody>
+          </Card>
 
           {/* Section optionnelle */}
-          <details className="section-optionnelle border-2 border-gray-200 rounded-xl mb-6">
-            <summary className="p-4 cursor-pointer hover:bg-gray-50 rounded-xl transition-colors font-semibold text-gray-800 flex items-center gap-2">
-              <span className="text-xl">💳</span>
-              <span>+ Dons détaillés avec reçus (chèques/cartes)</span>
-              <span className="ml-auto bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm font-medium">
-                {formData.donsAvecRecus.length}
-              </span>
-            </summary>
-            
-            <div className="p-4 border-t border-gray-200">
-              <p className="text-sm text-gray-600 mb-4">
-                📧 Ajoutez ici les dons par chèque ou carte bancaire pour lesquels vous souhaitez envoyer un reçu automatique par email.
-              </p>
-              <DonsDetailsList 
-                dons={formData.donsAvecRecus}
-                onUpdate={updateDonsAvecRecus}
-              />
-            </div>
-          </details>
+          <Card className="border-2 border-gray-200 mb-6">
+            <details>
+              <summary className="p-4 cursor-pointer hover:bg-gray-50 transition-colors font-semibold text-gray-800 flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-blue-600" />
+                <span>+ Dons détaillés avec reçus (chèques/cartes)</span>
+                <Badge variant="secondary" size="sm" className="ml-auto">
+                  {formData.donsAvecRecus.length}
+                </Badge>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
+              </summary>
+              
+              <CardBody className="border-t border-gray-200">
+                <div className="flex items-start gap-2 mb-4 p-3 bg-blue-50 rounded-lg">
+                  <CreditCard className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-blue-800">
+                    Ajoutez ici les dons par chèque ou carte bancaire pour lesquels vous souhaitez envoyer un reçu automatique par email.
+                  </p>
+                </div>
+                <DonsDetailsList 
+                  dons={formData.donsAvecRecus}
+                  onUpdate={updateDonsAvecRecus}
+                />
+              </CardBody>
+            </details>
+          </Card>
 
           {/* Récapitulatif */}
           {(formData.totalEspeces || formData.donsAvecRecus.length > 0) && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-              <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                <span>📋</span>
-                <span>Récapitulatif</span>
-              </h4>
+            <Card className="bg-blue-50 border-2 border-blue-200 mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-semibold text-blue-800">
+                    Récapitulatif
+                  </h4>
+                </div>
+              </CardHeader>
               
-              <div className="space-y-2 text-sm text-blue-800">
-                {formData.totalEspeces && (
-                  <div className="flex justify-between">
-                    <span>💵 Total espèces:</span>
-                    <strong>{formData.totalEspeces}€</strong>
-                  </div>
-                )}
-                
-                {formData.calendarsVendus && (
-                  <div className="flex justify-between">
-                    <span>📅 Calendriers vendus:</span>
-                    <strong>{formData.calendarsVendus}</strong>
-                  </div>
-                )}
-                
-                {formData.donsAvecRecus.length > 0 && (
-                  <div className="flex justify-between">
-                    <span>💳 Dons détaillés:</span>
-                    <strong>
-                      {formData.donsAvecRecus.length} don{formData.donsAvecRecus.length > 1 ? 's' : ''} 
-                      ({formData.donsAvecRecus.reduce((sum, don) => sum + don.amount, 0)}€)
-                    </strong>
-                  </div>
-                )}
-                
-                <div className="border-t border-blue-300 pt-2 mt-2">
-                  <div className="flex justify-between text-base font-bold">
-                    <span>🏆 Total général:</span>
-                    <span>
-                      {(parseFloat(formData.totalEspeces) || 0) + formData.donsAvecRecus.reduce((sum, don) => sum + don.amount, 0)}€
-                    </span>
+              <CardBody>
+                <div className="space-y-2 text-sm text-blue-800">
+                  {formData.totalEspeces && (
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Banknote className="w-4 h-4" />
+                        <span>Total espèces:</span>
+                      </div>
+                      <strong>{formData.totalEspeces}€</strong>
+                    </div>
+                  )}
+                  
+                  {formData.calendarsVendus && (
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>Calendriers vendus:</span>
+                      </div>
+                      <strong>{formData.calendarsVendus}</strong>
+                    </div>
+                  )}
+                  
+                  {formData.donsAvecRecus.length > 0 && (
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" />
+                        <span>Dons détaillés:</span>
+                      </div>
+                      <strong>
+                        {formData.donsAvecRecus.length} don{formData.donsAvecRecus.length > 1 ? 's' : ''} 
+                        ({formData.donsAvecRecus.reduce((sum, don) => sum + don.amount, 0)}€)
+                      </strong>
+                    </div>
+                  )}
+                  
+                  <div className="border-t border-blue-300 pt-2 mt-2">
+                    <div className="flex justify-between items-center text-base font-bold">
+                      <div className="flex items-center gap-2">
+                        <Trophy className="w-4 h-4" />
+                        <span>Total général:</span>
+                      </div>
+                      <span>
+                        {(parseFloat(formData.totalEspeces) || 0) + formData.donsAvecRecus.reduce((sum, don) => sum + don.amount, 0)}€
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           )}
 
           {/* Offline Notice */}
           {!isOnline && (
-            <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 mb-6">
-              <div className="text-sm text-orange-800">
-                <div className="flex items-center gap-2 font-semibold mb-2">
-                  <span className="text-lg">📱</span>
-                  <span>Mode hors-ligne</span>
+            <Card className="bg-orange-50 border-2 border-orange-200 mb-6">
+              <CardBody>
+                <div className="flex items-start gap-3">
+                  <Smartphone className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <div className="font-semibold text-orange-800 mb-1">
+                      Mode hors-ligne
+                    </div>
+                    <p className="text-sm text-orange-800">
+                      La clôture sera sauvegardée localement et synchronisée dès le retour du réseau.
+                    </p>
+                  </div>
                 </div>
-                <p>La clôture sera sauvegardée localement et synchronisée dès le retour du réseau.</p>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           )}
 
           {/* Boutons d'action */}
           <div className="modal-actions flex gap-3">
-            <button 
+            <Button 
               type="button" 
               onClick={onClose}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-4 px-6 rounded-xl transition-colors text-lg"
+              variant="secondary"
+              size="lg"
+              className="flex-1"
             >
               Annuler
-            </button>
-            <button 
+            </Button>
+            <Button 
               type="submit" 
               disabled={submitInProgress}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-4 px-6 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
+              variant="primary"
+              size="lg"
+              className="flex-1 gap-2"
             >
               {submitInProgress && (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               )}
-              <span className="text-xl">✅</span>
-              <span>{isOnline ? 'Clôturer' : 'Sauver offline'}</span>
-            </button>
+              <Check className="w-4 h-4" />
+              {isOnline ? 'Clôturer' : 'Sauver offline'}
+            </Button>
           </div>
         </form>
       </div>
