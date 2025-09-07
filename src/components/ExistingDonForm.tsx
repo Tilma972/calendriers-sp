@@ -313,7 +313,7 @@ export default function ExistingDonForm({
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white border-4 border-red-500 min-h-screen">
+    <div className="max-w-2xl mx-auto p-6 bg-white border-4 min-h-screen">
       {/* Header épuré */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-2">
