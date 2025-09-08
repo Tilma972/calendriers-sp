@@ -194,6 +194,89 @@ export type Database = {
             foreignKeyName: "profiles_team_id_fkey"
             columns: ["team_id"]
             isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
+          },
+          {
+            foreignKeyName: "profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v_teams_leaderboard"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qr_interactions: {
+        Row: {
+          amount: number | null
+          calendars_count: number | null
+          completed_at: string | null
+          created_at: string | null
+          donator_email: string | null
+          donator_name: string | null
+          expires_at: string | null
+          id: string
+          interaction_id: string
+          ip_address: unknown | null
+          status: string | null
+          stripe_session_id: string | null
+          team_id: string
+          updated_at: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          amount?: number | null
+          calendars_count?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          donator_email?: string | null
+          donator_name?: string | null
+          expires_at?: string | null
+          id?: string
+          interaction_id: string
+          ip_address?: unknown | null
+          status?: string | null
+          stripe_session_id?: string | null
+          team_id: string
+          updated_at?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          amount?: number | null
+          calendars_count?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          donator_email?: string | null
+          donator_name?: string | null
+          expires_at?: string | null
+          id?: string
+          interaction_id?: string
+          ip_address?: unknown | null
+          status?: string | null
+          stripe_session_id?: string | null
+          team_id?: string
+          updated_at?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_interactions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qr_interactions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
+          },
+          {
+            foreignKeyName: "qr_interactions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
             referencedRelation: "v_teams_leaderboard"
             referencedColumns: ["id"]
           },
@@ -277,68 +360,6 @@ export type Database = {
           },
         ]
       }
-      qr_interactions: {
-        Row: {
-          amount: number | null
-          calendars_count: number | null
-          completed_at: string | null
-          created_at: string | null
-          donator_email: string | null
-          donator_name: string | null
-          expires_at: string | null
-          id: string
-          interaction_id: string
-          ip_address: string | null
-          status: "pending" | "completed" | "expired" | "cancelled" | null
-          stripe_session_id: string | null
-          team_id: string
-          updated_at: string | null
-          user_agent: string | null
-        }
-        Insert: {
-          amount?: number | null
-          calendars_count?: number | null
-          completed_at?: string | null
-          created_at?: string | null
-          donator_email?: string | null
-          donator_name?: string | null
-          expires_at?: string | null
-          id?: string
-          interaction_id: string
-          ip_address?: string | null
-          status?: "pending" | "completed" | "expired" | "cancelled" | null
-          stripe_session_id?: string | null
-          team_id: string
-          updated_at?: string | null
-          user_agent?: string | null
-        }
-        Update: {
-          amount?: number | null
-          calendars_count?: number | null
-          completed_at?: string | null
-          created_at?: string | null
-          donator_email?: string | null
-          donator_name?: string | null
-          expires_at?: string | null
-          id?: string
-          interaction_id?: string
-          ip_address?: string | null
-          status?: "pending" | "completed" | "expired" | "cancelled" | null
-          stripe_session_id?: string | null
-          team_id?: string
-          updated_at?: string | null
-          user_agent?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "qr_interactions_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tournees: {
         Row: {
           calendars_distributed: number | null
@@ -398,6 +419,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournees_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
           },
           {
             foreignKeyName: "tournees_team_id_fkey"
@@ -551,6 +579,13 @@ export type Database = {
             foreignKeyName: "transactions_team_id_fkey"
             columns: ["team_id"]
             isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
+          },
+          {
+            foreignKeyName: "transactions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
             referencedRelation: "v_teams_leaderboard"
             referencedColumns: ["id"]
           },
@@ -640,6 +675,20 @@ export type Database = {
           },
         ]
       }
+      v_qr_stats_by_team: {
+        Row: {
+          completed_interactions: number | null
+          conversion_rate: number | null
+          expired_interactions: number | null
+          pending_interactions: number | null
+          team_color: string | null
+          team_id: string | null
+          team_name: string | null
+          total_amount_qr: number | null
+          total_interactions: number | null
+        }
+        Relationships: []
+      }
       v_sapeur_dashboard: {
         Row: {
           calendars_distributed: number | null
@@ -665,6 +714,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
           },
           {
             foreignKeyName: "profiles_team_id_fkey"
@@ -713,6 +769,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v_qr_stats_by_team"
+            referencedColumns: ["team_id"]
           },
           {
             foreignKeyName: "profiles_team_id_fkey"
@@ -777,9 +840,31 @@ export type Database = {
       }
     }
     Functions: {
+      cleanup_expired_qr_interactions: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      complete_qr_interaction: {
+        Args: {
+          donator_email_param?: string
+          donator_name_param?: string
+          interaction_id_param: string
+          stripe_session_id_param: string
+        }
+        Returns: {
+          success: boolean
+          team_id: string
+          team_name: string
+          transaction_id: string
+        }[]
+      }
       end_tournee: {
         Args: { p_calendars_remaining: number; p_tournee_id: string }
         Returns: boolean
+      }
+      generate_qr_interaction_id: {
+        Args: { team_uuid: string }
+        Returns: string
       }
       get_transaction_for_receipt: {
         Args: { transaction_id: string }
@@ -805,6 +890,18 @@ export type Database = {
       get_user_team: {
         Args: { user_id: string }
         Returns: string
+      }
+      initiate_qr_interaction: {
+        Args: {
+          ip_address_param?: unknown
+          team_uuid: string
+          user_agent_param?: string
+        }
+        Returns: {
+          expires_at: string
+          interaction_id: string
+          stripe_payment_link_url: string
+        }[]
       }
       is_chef_equipe: {
         Args: { user_id: string }
@@ -980,6 +1077,7 @@ export const Constants = {
         "carte",
         "virement",
         "especes_batch",
+        "carte_qr",
       ],
       receipt_status_enum: ["pending", "generated", "failed", "cancelled"],
       role_enum: ["sapeur", "chef_equipe", "tresorier"],
