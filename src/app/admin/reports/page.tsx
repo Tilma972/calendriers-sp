@@ -33,6 +33,24 @@ interface ReportStats {
   };
 }
 
+// Type minimal pour les enregistrements de transaction retournés par Supabase
+interface TransactionRecord {
+  id?: string;
+  receipt_number?: string | null;
+  created_at?: string | null;
+  amount?: number | null;
+  calendars_given?: number | null;
+  payment_method?: string | null;
+  donator_name?: string | null;
+  donator_email?: string | null;
+  status?: string | null;
+  validated_team_at?: string | null;
+  validated_tresorier_at?: string | null;
+  notes?: string | null;
+  user_id?: string | null;
+  team_id?: string | null;
+}
+
 // Hook pour gestion des exports
 function useAdminReports() {
   const [stats, setStats] = useState<ReportStats | null>(null);
@@ -56,9 +74,14 @@ function useAdminReports() {
       // Charger les stats globales
       await calculateStats();
 
-    } catch (error: any) {
-      console.error('Erreur chargement rapports:', error);
-      toast.error(`Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur chargement rapports:', error);
+        toast.error(`Erreur: ${error.message}`);
+      } else {
+        console.error('Erreur chargement rapports:', String(error));
+        toast.error(`Erreur: ${String(error)}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -89,30 +112,36 @@ function useAdminReports() {
       if (error) throw error;
 
       if (data) {
+        const typedData = data as TransactionRecord[];
         const reportStats: ReportStats = {
-          total_transactions: data.length,
-          total_amount: data.reduce((sum, t) => sum + t.amount, 0),
-          total_calendars: data.reduce((sum, t) => sum + t.calendars_given, 0),
-          avg_donation: data.length > 0 ? data.reduce((sum, t) => sum + t.amount, 0) / data.length : 0,
+          total_transactions: typedData.length,
+          total_amount: typedData.reduce((sum, t) => sum + (t.amount || 0), 0),
+          total_calendars: typedData.reduce((sum, t) => sum + (t.calendars_given || 0), 0),
+          avg_donation: typedData.length > 0 ? typedData.reduce((sum, t) => sum + (t.amount || 0), 0) / typedData.length : 0,
           transactions_by_method: {
-            especes: data.filter(t => t.payment_method === 'especes').length,
-            cheque: data.filter(t => t.payment_method === 'cheque').length,
-            carte: data.filter(t => t.payment_method === 'carte').length,
-            virement: data.filter(t => t.payment_method === 'virement').length,
+            especes: typedData.filter(t => t.payment_method === 'especes').length,
+            cheque: typedData.filter(t => t.payment_method === 'cheque').length,
+            carte: typedData.filter(t => t.payment_method === 'carte').length,
+            virement: typedData.filter(t => t.payment_method === 'virement').length,
           },
           transactions_by_status: {
-            pending: data.filter(t => t.status === 'pending').length,
-            validated_team: data.filter(t => t.status === 'validated_team').length,
-            validated_tresorier: data.filter(t => t.status === 'validated_tresorier').length,
-            cancelled: data.filter(t => t.status === 'cancelled').length,
+            pending: typedData.filter(t => t.status === 'pending').length,
+            validated_team: typedData.filter(t => t.status === 'validated_team').length,
+            validated_tresorier: typedData.filter(t => t.status === 'validated_tresorier').length,
+            cancelled: typedData.filter(t => t.status === 'cancelled').length,
           }
         };
         setStats(reportStats);
       }
 
-    } catch (error: any) {
-      console.error('Erreur calcul stats:', error);
-      toast.error(`Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur calcul stats:', error);
+        toast.error(`Erreur: ${error.message}`);
+      } else {
+        console.error('Erreur calcul stats:', String(error));
+        toast.error(`Erreur: ${String(error)}`);
+      }
     }
   };
 
@@ -157,12 +186,15 @@ function useAdminReports() {
     const teamIds = [...new Set(data.map(t => t.team_id).filter(Boolean))];
 
     // 4. Charger les données liées en parallèle
+    const cleanUserIds = userIds.filter((id): id is string => !!id);
+    const cleanTeamIds = teamIds.filter((id): id is string => !!id);
+
     const [profilesRes, teamsRes] = await Promise.all([
-      userIds.length > 0 
-        ? supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+      cleanUserIds.length > 0 
+        ? supabase.from('profiles').select('id, full_name, email').in('id', cleanUserIds)
         : { data: [], error: null },
-      teamIds.length > 0 
-        ? supabase.from('teams').select('id, name, color').in('id', teamIds)
+      cleanTeamIds.length > 0 
+        ? supabase.from('teams').select('id, name, color').in('id', cleanTeamIds)
         : { data: [], error: null }
     ]);
 
@@ -183,14 +215,15 @@ function useAdminReports() {
     );
 
     // 7. Préparer les données pour l'export avec jointures manuelles
-    const exportData = data.map(transaction => {
-      const profile = profilesMap[transaction.user_id];
-      const team = teamsMap[transaction.team_id];
+      const exportData = data.map(transaction => {
+      const profile = profilesMap[transaction.user_id as string];
+      const team = teamsMap[transaction.team_id as string];
+      const createdAt = transaction.created_at ? new Date(transaction.created_at) : null;
       
       return {
-        'Numéro': transaction.receipt_number || transaction.id.slice(-8),
-        'Date': new Date(transaction.created_at).toLocaleDateString('fr-FR'),
-        'Heure': new Date(transaction.created_at).toLocaleTimeString('fr-FR'),
+        'Numéro': transaction.receipt_number || (transaction.id ? String(transaction.id).slice(-8) : ''),
+        'Date': createdAt ? createdAt.toLocaleDateString('fr-FR') : '',
+        'Heure': createdAt ? createdAt.toLocaleTimeString('fr-FR') : '',
         'Sapeur': profile?.full_name || '',
         'Email Sapeur': profile?.email || '',
         'Équipe': team?.name || '',
@@ -206,7 +239,7 @@ function useAdminReports() {
           new Date(transaction.validated_tresorier_at).toLocaleDateString('fr-FR') : '',
         'Notes': transaction.notes || ''
       };
-    });
+  });
 
     // 8. Télécharger selon le format
     if (format === 'csv') {
@@ -217,15 +250,20 @@ function useAdminReports() {
 
     toast.success(`${data.length} transactions exportées`, { id: 'export' });
 
-  } catch (error: any) {
-    console.error('Erreur export:', error);
-    toast.error(`Erreur: ${error.message}`, { id: 'export' });
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('Erreur export:', error);
+      toast.error(`Erreur: ${error.message}`, { id: 'export' });
+    } else {
+      console.error('Erreur export:', String(error));
+      toast.error(`Erreur: ${String(error)}`, { id: 'export' });
+    }
   } finally {
     setIsExporting(false);
   }
 };
 
-  const exportTeamPerformance = async (filters: ExportFilters) => {
+  const exportTeamPerformance = async () => {
     try {
       setIsExporting(true);
       toast.loading('Export performance équipes...', { id: 'export-teams' });
@@ -258,10 +296,15 @@ function useAdminReports() {
       downloadCSV(exportData, 'performance_equipes');
       toast.success(`${teamsData.length} équipes exportées`, { id: 'export-teams' });
 
-    } catch (error: any) {
-      console.error('Erreur export équipes:', error);
-      toast.error(`Erreur: ${error.message}`, { id: 'export-teams' });
-    } finally {
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+          console.error('Erreur export équipes:', error);
+          toast.error(`Erreur: ${error.message}`, { id: 'export-teams' });
+        } else {
+          console.error('Erreur export équipes:', String(error));
+          toast.error(`Erreur: ${String(error)}`, { id: 'export-teams' });
+        }
+      } finally {
       setIsExporting(false);
     }
   };
@@ -279,21 +322,27 @@ function useAdminReports() {
 }
 
 // Fonction utilitaire pour télécharger CSV
-function downloadCSV(data: any[], filename: string, asExcel = false) {
-  if (data.length === 0) return;
+function downloadCSV(
+  data: Array<Record<string, string | number | null | undefined>>,
+  filename: string,
+  asExcel = false
+) {
+  if (!data || data.length === 0) return;
 
   const headers = Object.keys(data[0]);
   const csvContent = [
     headers.join(','),
-    ...data.map(row => 
-      headers.map(header => {
-        const cell = row[header];
-        // Échapper les guillemets et virgules
-        if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
-          return `"${cell.replace(/"/g, '""')}"`;
-        }
-        return cell;
-      }).join(',')
+    ...data.map(row =>
+      headers
+        .map(header => {
+          const cell = row[header];
+          // Échapper les guillemets et virgules
+          if (typeof cell === 'string' && (cell.includes(',') || cell.includes('"') || cell.includes('\n'))) {
+            return `"${cell.replace(/"/g, '""')}"`;
+          }
+          return cell ?? '';
+        })
+        .join(',')
     )
   ].join('\n');
 
@@ -333,14 +382,14 @@ export default function AdminReportsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Recalculer les stats quand les filtres changent
   useEffect(() => {
     if (!isLoading) {
       calculateStats(filters);
     }
-  }, [filters, isLoading]);
+  }, [filters, isLoading, calculateStats]);
 
   const handleFilterChange = (key: keyof ExportFilters, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
@@ -568,7 +617,7 @@ export default function AdminReportsPage() {
               </p>
               
               <button
-                onClick={() => exportTeamPerformance(filters)}
+                onClick={() => exportTeamPerformance()}
                 disabled={isExporting}
                 className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition-colors"
               >
@@ -593,7 +642,7 @@ export default function AdminReportsPage() {
                 }}
                 className="p-3 text-left bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <div className="font-medium text-gray-900">Aujourd'hui</div>
+                <div className="font-medium text-gray-900">Aujourd&apos;hui</div>
                 <div className="text-sm text-gray-500">Activité du jour</div>
               </button>
 

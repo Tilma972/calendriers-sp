@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -14,7 +15,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #ffffff;
     --foreground: #ededed;
   }
 }
@@ -112,4 +113,82 @@ button:disabled {
 /* Smooth transitions for all interactive elements */
 .tap-target {
   transition: all 0.2s ease;
+}
+
+/* ===== FIX TEXTES GRIS TROP CLAIRS - INTERFACE ADMIN ===== */
+
+/* Correction globale pour les textes trop clairs dans l'admin */
+.text-gray-400 {
+  color: #4b5563 !important; /* Plus foncé que la valeur par défaut */
+}
+
+.text-gray-500 {
+  color: #374151 !important; /* Beaucoup plus foncé */
+}
+
+/* Force l'application sur TOUS les éléments concernés */
+* .text-gray-400,
+* .text-gray-500,
+* .text-gray-300 {
+  color: #374151 !important;
+}
+
+/* Spécifiquement pour l'interface admin */
+[class*="admin"] .text-gray-400,
+[class*="admin"] .text-gray-500 {
+  color: #374151 !important; /* Gris très foncé pour admin */
+}
+
+/* Corrections spécifiques pour les textes d'interface admin */
+/* "Créer un utilisateur", "Créer une équipe", etc. */
+.admin-dashboard .text-gray-500,
+.admin-interface .text-gray-500,
+.admin-page .text-gray-500 {
+  color: #1f2937 !important; /* Presque noir */
+}
+
+/* Headers de tableaux admin */
+th.text-gray-500 {
+  color: #374151 !important;
+}
+
+/* Descriptions et sous-textes admin */
+.text-xs.text-gray-500,
+.text-sm.text-gray-500 {
+  color: #4b5563 !important;
+}
+
+/* Fix spécifique pour les cartes de statistiques admin */
+.bg-white .text-gray-500 {
+  color: #4b5563 !important;
+}
+
+/* Fix pour les liens et navigation admin */
+a.text-gray-500 {
+  color: #4b5563 !important;
+}
+
+a.text-gray-500:hover {
+  color: #1f2937 !important;
+}
+
+/* Correction pour les textes dans les sections admin */
+.space-y-6 .text-gray-500,
+.admin .text-gray-500 {
+  color: #374151 !important;
+}
+
+/* Override pour tous les textes gris dans l'admin */
+[data-admin] .text-gray-400,
+[data-admin] .text-gray-500 {
+  color: #1f2937 !important;
+}
+
+/* Style plus général pour améliorer le contraste partout */
+.text-gray-400:not(.keep-light) {
+  color: #6b7280 !important;
+}
+
+.text-gray-500:not(.keep-light) {
+  color: #4b5563 !important;
 }

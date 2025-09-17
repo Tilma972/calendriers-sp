@@ -58,9 +58,10 @@ export function useTourneeData(userId: string | undefined) {
         setTourneeActive(null);
       }
 
-    } catch (err: any) {
-      console.error('Erreur chargement tournée:', err);
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Erreur chargement tournée:', message);
+      setError(message);
     } finally {
       if (showLoading) setIsLoading(false);
     }

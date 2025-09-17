@@ -1,10 +1,32 @@
-// src/app/admin/users/page.tsx - Version complète avec gestion d'erreur
+// src/app/admin/users-new/page.tsx - Page Users Refactorisée
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
-import { toast } from 'react-hot-toast'; // À installer: npm install react-hot-toast
+import { toast } from 'react-hot-toast';
+import { 
+  AdminPage, 
+  AdminPageHeader, 
+  AdminContent, 
+  AdminSection,
+  AdminGrid,
+  AdminStatCard,
+  AdminTable,
+  AdminFormModal,
+  AdminConfirmModal
+} from '@/components/ui/admin';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { AdminTableFilters } from '@/components/ui/admin/AdminTable';
+import { adminTheme, getRoleStyle } from '@/components/ui/admin/admin-theme';
+import { 
+  Users, 
+  Pause, 
+  DollarSign,
+  Shield,
+  UserCheck,
+  Plus
+} from 'lucide-react';
 
 interface User {
   id: string;
@@ -13,17 +35,17 @@ interface User {
   role: 'sapeur' | 'chef_equipe' | 'tresorier';
   team_id: string | null;
   team_name: string | null;
-  is_active: boolean;
-  created_at: string;
+  is_active: boolean | null;
+  created_at: string | null;
 }
 
 interface Team {
   id: string;
   name: string;
-  color: string;
+  color: string | null;
 }
 
-// Hook personnalisé pour la gestion des utilisateurs admin
+// Hook personnalisé pour la gestion des utilisateurs admin (même logique que l'original)
 function useAdminUsers() {
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -33,7 +55,7 @@ function useAdminUsers() {
     try {
       setIsLoading(true);
 
-      // Charger utilisateurs SANS jointure
+      // Charger utilisateurs SANS jointure (même logique que l'original)
       const { data: usersData, error: usersError } = await supabase
         .from('profiles')
         .select(`
@@ -49,7 +71,7 @@ function useAdminUsers() {
 
       if (usersError) throw usersError;
 
-      // Charger équipes pour les selects ET les noms
+      // Charger équipes
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
         .select('id, name, color')
@@ -81,24 +103,24 @@ function useAdminUsers() {
         setTeams(teamsData);
       }
 
-    } catch (error: any) {
+      } catch (error: unknown) {
       console.error('Erreur chargement données:', error);
-      toast.error(`Erreur: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Mise à jour optimiste + rollback en cas d'erreur
+  // Mise à jour utilisateur avec optimistic update (même logique que l'original)
   const updateUser = async (userId: string, updates: Partial<Pick<User, 'role' | 'team_id' | 'is_active'>>) => {
-    // 1. Sauvegarder état actuel pour rollback
     const originalUser = users.find(u => u.id === userId);
     if (!originalUser) {
       toast.error('Utilisateur non trouvé');
       return;
     }
 
-    // 2. Mise à jour optimiste (UI instantanée)
+    // Mise à jour optimiste
     setUsers(prev =>
       prev.map(user =>
         user.id === userId
@@ -107,7 +129,6 @@ function useAdminUsers() {
       )
     );
 
-    // 3. Notification immédiate
     const actionText =
       updates.role ? `Rôle changé vers ${updates.role}` :
         updates.team_id !== undefined ? 'Équipe modifiée' :
@@ -117,7 +138,6 @@ function useAdminUsers() {
     toast.loading(`${actionText}...`, { id: `update-${userId}` });
 
     try {
-      // 4. Appel API
       const { error } = await supabase
         .from('profiles')
         .update(updates)
@@ -125,33 +145,33 @@ function useAdminUsers() {
 
       if (error) throw error;
 
-      // 5. Succès
       toast.success(`${actionText} avec succès`, { id: `update-${userId}` });
-
-      // Recharger les données pour être sûr
       setTimeout(() => loadData(), 500);
 
-    } catch (error: any) {
-      // 6. Rollback en cas d'erreur
+    } catch (error: unknown) {
+      // Rollback
       setUsers(prev =>
         prev.map(user =>
           user.id === userId ? originalUser : user
         )
       );
 
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Erreur mise à jour:', error);
-      toast.error(`Erreur: ${error.message}`, { id: `update-${userId}` });
+      toast.error(`Erreur: ${message}`, { id: `update-${userId}` });
     }
   };
 
   return { users, teams, isLoading, loadData, updateUser };
 }
 
-export default function AdminUsersPage() {
+export default function AdminUsersPageNew() {
   const { users, teams, isLoading, loadData, updateUser } = useAdminUsers();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showResetModal, setShowResetModal] = useState<string | null>(null);
 
@@ -159,20 +179,17 @@ export default function AdminUsersPage() {
   const [newUser, setNewUser] = useState({
     email: '',
     full_name: '',
-    role: 'sapeur' as const,
+    role: 'sapeur' as 'sapeur' | 'chef_equipe' | 'tresorier',
     team_id: '',
     password: '',
   });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
-  // Fonction de création utilisateur avec gestion d'erreur
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Validation côté client
+  // Fonction de création utilisateur (même logique que l'original)
+  const handleCreateUser = async () => {
     if (!newUser.email || !newUser.full_name || !newUser.password) {
       toast.error('Tous les champs obligatoires doivent être remplis');
       return;
@@ -183,10 +200,7 @@ export default function AdminUsersPage() {
       return;
     }
 
-    const loadingToast = toast.loading('Création de l\'utilisateur...');
-
     try {
-      // Créer l'utilisateur dans Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
@@ -200,7 +214,6 @@ export default function AdminUsersPage() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Mettre à jour le profil avec le rôle et l'équipe
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -218,7 +231,6 @@ export default function AdminUsersPage() {
         }
       }
 
-      // Reset form et recharger
       setNewUser({
         email: '',
         full_name: '',
@@ -229,18 +241,15 @@ export default function AdminUsersPage() {
       setShowCreateForm(false);
       loadData();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erreur création:', error);
-      toast.error(`Erreur: ${error.message}`);
-    } finally {
-      toast.dismiss(loadingToast);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     }
   };
 
-  // Gestion réinitialisation mot de passe
+  // Gestion réinitialisation mot de passe (même logique que l'original)
   const handleResetPassword = async (userId: string, userEmail: string) => {
-    const loadingToast = toast.loading('Envoi email de réinitialisation...');
-
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
         redirectTo: `${window.location.origin}/auth/reset-password`
@@ -251,11 +260,10 @@ export default function AdminUsersPage() {
       toast.success('Email de réinitialisation envoyé');
       setShowResetModal(null);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erreur reset password:', error);
-      toast.error(`Erreur: ${error.message}`);
-    } finally {
-      toast.dismiss(loadingToast);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     }
   };
 
@@ -266,310 +274,384 @@ export default function AdminUsersPage() {
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesRole = filterRole === 'all' || user.role === filterRole;
+    const matchesTeam = filterTeam === 'all' || user.team_id === filterTeam;
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'active' && user.is_active) ||
+      (filterStatus === 'inactive' && !user.is_active);
 
-    return matchesSearch && matchesRole;
+    return matchesSearch && matchesRole && matchesTeam && matchesStatus;
   });
 
-  if (isLoading) {
-    return (
-      <AdminGuard>
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Chargement des utilisateurs...</p>
+  // Stats pour les cartes
+  const stats = {
+    total: users.length,
+    active: users.filter(u => u.is_active).length,
+    sapeurs: users.filter(u => u.role === 'sapeur').length,
+    chefs: users.filter(u => u.role === 'chef_equipe').length,
+    tresoriers: users.filter(u => u.role === 'tresorier').length
+  };
+
+  // Configuration des colonnes de table
+  const tableColumns = [
+    {
+      key: 'user',
+      title: 'Utilisateur',
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {u.full_name}
+            </div>
+            <div className="text-sm text-gray-700">{u.email}</div>
           </div>
-        </div>
-      </AdminGuard>
-    );
-  }
+        );
+      }
+    },
+    {
+      key: 'role',
+      title: 'Rôle',
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const v = String(value ?? '');
+        const u = row as unknown as User;
+        const style = getRoleStyle(v as keyof typeof adminTheme.colors.roles);
+        return (
+          <div className="flex items-center gap-2">
+            <span className={`px-2 py-1 text-xs font-medium rounded-full ${style.bg} ${style.text}`}>
+              {style.icon} {String(value ?? '').replace('_', ' ')}
+            </span>
+            <select
+              value={u.role}
+              onChange={(e) => updateUser(u.id, { role: e.target.value as 'sapeur' | 'chef_equipe' | 'tresorier' })}
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <option value="sapeur">Sapeur</option>
+              <option value="chef_equipe">Chef équipe</option>
+              <option value="tresorier">Trésorier</option>
+            </select>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'team',
+      title: 'Équipe',
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-900">
+              {u.team_name || 'Aucune équipe'}
+            </span>
+            <select
+              value={u.team_id || ''}
+              onChange={(e) => updateUser(u.id, { team_id: e.target.value || null })}
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <option value="">Aucune équipe</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'status',
+      title: 'Statut',
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              updateUser(u.id, { is_active: !u.is_active });
+            }}
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+              u.is_active
+                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            {u.is_active ? 'Actif' : 'Inactif'}
+          </button>
+        );
+      }
+    },
+    {
+      key: 'created_at',
+      title: 'Créé le',
+      render: (value: unknown) => (
+        <span className="text-sm text-gray-700">
+          {value ? new Date(String(value)).toLocaleDateString('fr-FR') : '—'}
+        </span>
+      )
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowResetModal(u.id);
+            }}
+            className="text-blue-600 hover:text-blue-800 text-sm hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+          >
+            Reset MDP
+          </button>
+        );
+      }
+    }
+  ];
 
   return (
-    <AdminGuard>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header Admin */}
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center gap-3">
-                <a href="/admin" className="text-gray-500 hover:text-gray-700">← Dashboard</a>
-                <div className="text-2xl">👥</div>
-                <h1 className="text-xl font-bold text-gray-900">Gestion Utilisateurs</h1>
-              </div>
+    <AdminPage>
+      <AdminPageHeader
+        title="Gestion Utilisateurs"
+        subtitle="Création et gestion des comptes utilisateur"
+        icon={<Users className="w-6 h-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Utilisateurs' }
+        ]}
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowCreateForm(true)}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nouvel Utilisateur
+          </Button>
+        }
+      />
 
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
-              >
-                Nouvel Utilisateur
-              </button>
+      <AdminContent>
+        {/* Stats utilisateurs */}
+        <AdminSection>
+          <AdminGrid cols={5} gap="md">
+            <AdminStatCard
+              title="Total"
+              value={stats.total}
+              icon={<Users className="w-8 h-8" />}
+              subtitle={`${stats.active} actifs`}
+              onClick={() => setFilterStatus('all')}
+            />
+            <AdminStatCard
+              title="Sapeurs"
+              value={stats.sapeurs}
+              icon={<UserCheck className="w-8 h-8" />}
+              subtitle="Collecteurs"
+              onClick={() => setFilterRole('sapeur')}
+            />
+            <AdminStatCard
+              title="Chefs d'équipe"
+              value={stats.chefs}
+              icon={<Shield className="w-8 h-8" />}
+              subtitle="Responsables"
+              onClick={() => setFilterRole('chef_equipe')}
+            />
+            <AdminStatCard
+              title="Trésoriers"
+              value={stats.tresoriers}
+              icon={<DollarSign className="w-8 h-8" />}
+              subtitle="Gestionnaires"
+              onClick={() => setFilterRole('tresorier')}
+            />
+            <AdminStatCard
+              title="Inactifs"
+              value={stats.total - stats.active}
+              icon={<Pause className="w-8 h-8" />}
+              subtitle="Désactivés"
+              onClick={() => setFilterStatus('inactive')}
+            />
+          </AdminGrid>
+        </AdminSection>
+
+        {/* Filtres et recherche */}
+        <AdminSection>
+          <AdminTableFilters
+            onReset={() => {
+              setSearchTerm('');
+              setFilterRole('all');
+              setFilterTeam('all');
+              setFilterStatus('all');
+            }}
+          >
+            <div>
+              <Input
+                label="Recherche"
+                placeholder="Nom ou email..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                leftIcon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+              />
             </div>
-          </div>
-        </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Filtres et recherche */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Rechercher par nom ou email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
               <select
                 value={filterRole}
                 onChange={(e) => setFilterRole(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
               >
                 <option value="all">Tous les rôles</option>
                 <option value="sapeur">Sapeurs</option>
-                <option value="chef_equipe">Chefs d'équipe</option>
+                <option value="chef_equipe">Chefs d&apos;&eacute;quipe</option>
                 <option value="tresorier">Trésoriers</option>
               </select>
             </div>
 
-            <div className="mt-4 text-sm text-gray-600">
-              {filteredUsers.length} utilisateur(s) • {users.filter(u => u.is_active).length} actif(s)
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Équipe</label>
+              <select
+                value={filterTeam}
+                onChange={(e) => setFilterTeam(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="all">Toutes les équipes</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="active">Actifs</option>
+                <option value="inactive">Inactifs</option>
+              </select>
+            </div>
+          </AdminTableFilters>
+        </AdminSection>
+
+        {/* Table des utilisateurs */}
+        <AdminSection>
+          <AdminTable
+            columns={tableColumns}
+            data={filteredUsers as unknown as Record<string, unknown>[]}
+            isLoading={isLoading}
+            emptyMessage="Aucun utilisateur trouvé avec ces critères"
+            emptyIcon={<Users className="w-16 h-16" />}
+            rowKey="id"
+          />
+        </AdminSection>
+      </AdminContent>
+
+      {/* Modal création utilisateur */}
+      <AdminFormModal
+        isOpen={showCreateForm}
+        onClose={() => setShowCreateForm(false)}
+        onSubmit={handleCreateUser}
+        onCancel={() => setShowCreateForm(false)}
+        title="Créer un Nouvel Utilisateur"
+        subtitle="Configurer un nouveau compte utilisateur"
+        submitText="Créer"
+        cancelText="Annuler"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Nom complet"
+            value={newUser.full_name}
+            onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+            placeholder="Jean Dupont"
+            required
+          />
+
+          <Input
+            label="Email"
+            type="email"
+            value={newUser.email}
+            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+            placeholder="jean.dupont@example.com"
+            required
+          />
+
+          <Input
+            label="Mot de passe temporaire"
+            type="password"
+            value={newUser.password}
+            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+            placeholder="Minimum 6 caractères"
+            helperText="L'utilisateur pourra changer ce mot de passe à sa première connexion"
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rôle
+              </label>
+              <select
+                value={newUser.role}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'sapeur' | 'chef_equipe' | 'tresorier' })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="sapeur">Sapeur</option>
+                <option value="chef_equipe">Chef d&apos;&eacute;quipe</option>
+                <option value="tresorier">Trésorier</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Équipe (optionnel)
+              </label>
+              <select
+                value={newUser.team_id}
+                onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="">Aucune équipe</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
+        </div>
+      </AdminFormModal>
 
-          {/* Table utilisateurs */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Utilisateur
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Rôle
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Équipe
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Statut
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Créé le
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.full_name}
-                          </div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                        </div>
-                      </td>
+      {/* Modal confirmation reset password */}
+      {showResetModal && (() => {
+        const user = users.find(u => u.id === showResetModal);
+        if (!user) return null;
 
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={user.role}
-                          onChange={(e) => updateUser(user.id, { role: e.target.value as any })}
-                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
-                        >
-                          <option value="sapeur">Sapeur</option>
-                          <option value="chef_equipe">Chef équipe</option>
-                          <option value="tresorier">Trésorier</option>
-                        </select>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          value={user.team_id || ''}
-                          onChange={(e) => updateUser(user.id, { team_id: e.target.value || null })}
-                          className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
-                        >
-                          <option value="">Aucune équipe</option>
-                          {teams.map((team) => (
-                            <option key={team.id} value={team.id}>
-                              {team.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => updateUser(user.id, { is_active: !user.is_active })}
-                          className={`px-2 py-1 text-xs rounded-full ${user.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                            }`}
-                        >
-                          {user.is_active ? 'Actif' : 'Inactif'}
-                        </button>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => setShowResetModal(user.id)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          Reset MDP
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Modal création utilisateur */}
-          {showCreateForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  Créer un Nouvel Utilisateur
-                </h3>
-
-                <form onSubmit={handleCreateUser} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nom complet
-                    </label>
-                    <input
-                      type="text"
-                      value={newUser.full_name}
-                      onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Mot de passe temporaire
-                    </label>
-                    <input
-                      type="password"
-                      value={newUser.password}
-                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                      placeholder="Min. 6 caractères"
-                      minLength={6}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Rôle
-                    </label>
-                    <select
-                      value={newUser.role}
-                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                    >
-                      <option value="sapeur">Sapeur</option>
-                      <option value="chef_equipe">Chef d'équipe</option>
-                      <option value="tresorier">Trésorier</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Équipe (optionnel)
-                    </label>
-                    <select
-                      value={newUser.team_id}
-                      onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                    >
-                      <option value="">Aucune équipe</option>
-                      {teams.map((team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateForm(false)}
-                      className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
-                    >
-                      Annuler
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-                    >
-                      Créer
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* Modal confirmation reset password */}
-          {showResetModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl p-6 w-full max-w-sm">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  Réinitialiser le mot de passe
-                </h3>
-
-                <p className="text-gray-600 mb-6">
-                  Un email de réinitialisation sera envoyé à l'utilisateur.
-                </p>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowResetModal(null)}
-                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => {
-                      const user = users.find(u => u.id === showResetModal);
-                      if (user) handleResetPassword(user.id, user.email);
-                    }}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-                  >
-                    Envoyer
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    </AdminGuard>
+        return (
+          <AdminConfirmModal
+            isOpen={true}
+            onClose={() => setShowResetModal(null)}
+            onConfirm={() => handleResetPassword(user.id, user.email)}
+            title="Réinitialiser le mot de passe"
+            message={`Un email de réinitialisation sera envoyé à ${user.email}.`}
+            type="info"
+            confirmText="Envoyer"
+            cancelText="Annuler"
+          />
+        );
+      })()}
+    </AdminPage>
   );
 }

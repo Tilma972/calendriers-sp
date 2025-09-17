@@ -1,25 +1,49 @@
-// src/app/admin/transactions/page.tsx - Validation Transactions Admin
+// src/app/admin/transactions-new/page.tsx - Page Transactions Refactorisée
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { 
+  AdminPage, 
+  AdminPageHeader, 
+  AdminContent, 
+  AdminSection,
+  AdminGrid,
+  AdminStatCard,
+  AdminTable,
+  AdminModal,
+  AdminConfirmModal
+} from '@/components/ui/admin';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { AdminTableFilters } from '@/components/ui/admin/AdminTable';
+import { adminTheme, createStatusBadge, getPaymentStyle } from '@/components/ui/admin/admin-theme';
+import { 
+  CreditCard, 
+  Clock, 
+  Users, 
+  CheckCircle, 
+  DollarSign,
+  Eye,
+  Check,
+  X
+} from 'lucide-react';
 
 interface Transaction {
   id: string;
   user_id: string;
   team_id: string | null;
   tournee_id: string | null;
-  amount: number;
-  calendars_given: number;
-  payment_method: 'especes' | 'cheque' | 'carte' | 'virement';
+  amount: number | null;
+  calendars_given: number | null;
+  payment_method: 'especes' | 'cheque' | 'carte' | 'virement' | 'especes_batch' | 'carte_qr';
   donator_name: string | null;
   donator_email: string | null;
-  status: 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled';
+  status: 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled' | null;
   receipt_number: string | null;
   notes: string | null;
-  created_at: string;
+  created_at: string | null;
   validated_team_at: string | null;
   validated_tresorier_at: string | null;
   // Données jointes
@@ -28,13 +52,7 @@ interface Transaction {
   team_color: string | null;
 }
 
-interface ValidationNote {
-  transaction_id: string;
-  note: string;
-  action: 'validate' | 'reject';
-}
-
-// Hook personnalisé pour la gestion des transactions
+// Hook personnalisé (même logique que l'original)
 function useAdminTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,7 +62,7 @@ function useAdminTransactions() {
     try {
       setIsLoading(true);
 
-      // 1. Charger les transactions sans jointures
+      // Même logique de chargement que l'original
       const { data: transactionsData, error: transactionsError } = await supabase
         .from('transactions')
         .select(`
@@ -74,21 +92,21 @@ function useAdminTransactions() {
         return;
       }
 
-      // 2. Extraire les IDs uniques pour les jointures
-      const userIds = [...new Set(transactionsData.map(t => t.user_id).filter(Boolean))];
-      const teamIds = [...new Set(transactionsData.map(t => t.team_id).filter(Boolean))];
+      // Logique de jointures manuelles (identique à l'original)
+  const userIds = [...new Set(transactionsData.map(t => t.user_id).filter(Boolean))];
+  const teamIds = [...new Set(transactionsData.map(t => t.team_id))];
+  const userIdsFiltered = userIds.filter((id): id is string => !!id);
+  const teamIdsFiltered = teamIds.filter((id): id is string => !!id);
 
-      // 3. Charger les données liées en parallèle (plus performant)
       const [profilesResult, teamsResult] = await Promise.all([
-        userIds.length > 0
-          ? supabase.from('profiles').select('id, full_name').in('id', userIds.filter(Boolean) as string[])
+        userIdsFiltered.length > 0
+          ? supabase.from('profiles').select('id, full_name').in('id', userIdsFiltered)
           : { data: [], error: null },
-        teamIds.length > 0
-          ? supabase.from('teams').select('id, name, color').in('id', teamIds)
+        teamIdsFiltered.length > 0
+          ? supabase.from('teams').select('id, name, color').in('id', teamIdsFiltered)
           : { data: [], error: null }
       ]);
 
-      // 4. Vérifier les erreurs des requêtes parallèles
       if (profilesResult.error) {
         console.warn('Erreur chargement profiles:', profilesResult.error);
       }
@@ -96,7 +114,6 @@ function useAdminTransactions() {
         console.warn('Erreur chargement teams:', teamsResult.error);
       }
 
-      // 5. Créer des maps pour jointures rapides
       const profilesMap = Object.fromEntries(
         (profilesResult.data || []).map(profile => [profile.id, profile.full_name])
       );
@@ -104,14 +121,13 @@ function useAdminTransactions() {
         (teamsResult.data || []).map(team => [team.id, { name: team.name, color: team.color }])
       );
 
-      // 6. Enrichir les transactions avec les données jointes
       const enrichedTransactions: Transaction[] = transactionsData.map(transaction => ({
         id: transaction.id,
         user_id: transaction.user_id,
         team_id: transaction.team_id,
         tournee_id: transaction.tournee_id,
         amount: transaction.amount,
-        calendars_given: transaction.calendars_given,
+        calendars_given: transaction.calendars_given || 0,
         payment_method: transaction.payment_method,
         donator_name: transaction.donator_name,
         donator_email: transaction.donator_email,
@@ -121,23 +137,27 @@ function useAdminTransactions() {
         created_at: transaction.created_at,
         validated_team_at: transaction.validated_team_at,
         validated_tresorier_at: transaction.validated_tresorier_at,
-        // Données enrichies via jointures manuelles
         user_name: profilesMap[transaction.user_id] || null,
         team_name: transaction.team_id ? teamsMap[transaction.team_id]?.name || null : null,
         team_color: transaction.team_id ? teamsMap[transaction.team_id]?.color || null : null,
-      }));
+  }));
 
       setTransactions(enrichedTransactions);
 
-    } catch (error: any) {
-      console.error('Erreur chargement transactions:', error);
-      toast.error(`Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur chargement transactions:', error);
+        toast.error(`Erreur: ${error.message}`);
+      } else {
+        console.error('Erreur chargement transactions:', String(error));
+        toast.error(`Erreur: ${String(error)}`);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Validation individuelle avec mise à jour optimiste
+  // Validation individuelle (même logique que l'original)
   const validateTransaction = async (transactionId: string, action: 'validate' | 'reject', note?: string) => {
     const originalTransaction = transactions.find(t => t.id === transactionId);
     if (!originalTransaction) return;
@@ -150,7 +170,7 @@ function useAdminTransactions() {
         t.id === transactionId
           ? {
             ...t,
-            status: newStatus as any,
+            status: newStatus as Transaction['status'],
             validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null
           }
           : t
@@ -160,7 +180,7 @@ function useAdminTransactions() {
     const actionText = action === 'validate' ? 'Validation' : 'Rejet';
     toast.loading(`${actionText} en cours...`, { id: `validate-${transactionId}` });
 
-    try {
+  try {
       const { error } = await supabase
         .from('transactions')
         .update({
@@ -173,11 +193,9 @@ function useAdminTransactions() {
       if (error) throw error;
 
       toast.success(`Transaction ${action === 'validate' ? 'validée' : 'rejetée'}`, { id: `validate-${transactionId}` });
-
-      // Retirer de la sélection
       setSelectedTransactions(prev => prev.filter(id => id !== transactionId));
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback
       setTransactions(prev =>
         prev.map(t =>
@@ -185,12 +203,17 @@ function useAdminTransactions() {
         )
       );
 
-      console.error('Erreur validation:', error);
-      toast.error(`Erreur: ${error.message}`, { id: `validate-${transactionId}` });
+      if (error instanceof Error) {
+        console.error('Erreur validation:', error);
+        toast.error(`Erreur: ${error.message}`, { id: `validate-${transactionId}` });
+      } else {
+        console.error('Erreur validation:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: `validate-${transactionId}` });
+      }
     }
   };
 
-  // Validation en lot optimisée
+  // Validation en lot (même logique que l'original)
   const validateBulk = async (transactionIds: string[], action: 'validate' | 'reject', note?: string) => {
     if (transactionIds.length === 0) return;
 
@@ -203,7 +226,7 @@ function useAdminTransactions() {
         transactionIds.includes(t.id)
           ? {
             ...t,
-            status: newStatus as any,
+            status: newStatus as Transaction['status'],
             validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
             notes: note ? `${t.notes || ''}${t.notes ? '\n' : ''}Admin: ${note}` : t.notes
           }
@@ -214,8 +237,7 @@ function useAdminTransactions() {
     const actionText = action === 'validate' ? 'Validation' : 'Rejet';
     toast.loading(`${actionText} de ${transactionIds.length} transactions...`, { id: 'validate-bulk' });
 
-    try {
-      // Approche plus sûre : mise à jour une par une pour éviter les problèmes SQL
+  try {
       const updatePromises = transactionIds.map(transactionId => {
         const originalTransaction = originalTransactions.find(t => t.id === transactionId);
         const updatedNotes = note ?
@@ -233,9 +255,8 @@ function useAdminTransactions() {
       });
 
       const results = await Promise.all(updatePromises);
-
-      // Vérifier les erreurs
       const errors = results.filter(result => result.error);
+      
       if (errors.length > 0) {
         throw new Error(`${errors.length} transaction(s) ont échoué`);
       }
@@ -243,7 +264,7 @@ function useAdminTransactions() {
       toast.success(`${transactionIds.length} transactions ${action === 'validate' ? 'validées' : 'rejetées'}`, { id: 'validate-bulk' });
       setSelectedTransactions([]);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback
       setTransactions(prev =>
         prev.map(t => {
@@ -251,9 +272,13 @@ function useAdminTransactions() {
           return original || t;
         })
       );
-
-      console.error('Erreur validation bulk:', error);
-      toast.error(`Erreur: ${error.message}`, { id: 'validate-bulk' });
+      if (error instanceof Error) {
+        console.error('Erreur validation bulk:', error);
+        toast.error(`Erreur: ${error.message}`, { id: 'validate-bulk' });
+      } else {
+        console.error('Erreur validation bulk:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: 'validate-bulk' });
+      }
     }
   };
 
@@ -268,7 +293,7 @@ function useAdminTransactions() {
   };
 }
 
-export default function AdminTransactionsPage() {
+export default function AdminTransactionsPageNew() {
   const {
     transactions,
     isLoading,
@@ -281,7 +306,6 @@ export default function AdminTransactionsPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [teamFilter, setTeamFilter] = useState<string>('all');
-  const [userFilter, setUserFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showBulkModal, setShowBulkModal] = useState<{ action: 'validate' | 'reject' } | null>(null);
@@ -290,16 +314,14 @@ export default function AdminTransactionsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
-  // Filtrage des transactions avec tous les critères
+  // Filtrage (même logique que l'original)
   const filteredTransactions = transactions.filter(transaction => {
     const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
     const matchesTeam = teamFilter === 'all' || transaction.team_id === teamFilter;
-    const matchesUser = userFilter === 'all' || transaction.user_id === userFilter;
 
-    // Filtre par période
-    const transactionDate = new Date(transaction.created_at);
+  const transactionDate = new Date(transaction.created_at ?? '');
     const now = new Date();
     let matchesDate = true;
 
@@ -320,44 +342,45 @@ export default function AdminTransactionsPage() {
       transaction.donator_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       transaction.receipt_number?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesStatus && matchesTeam && matchesUser && matchesDate && matchesSearch;
+    return matchesStatus && matchesTeam && matchesDate && matchesSearch;
   });
 
-  // Stats pour le header
+  // Stats pour les cartes
   const stats = {
     pending: transactions.filter(t => t.status === 'pending').length,
     validated_team: transactions.filter(t => t.status === 'validated_team').length,
     validated_tresorier: transactions.filter(t => t.status === 'validated_tresorier').length,
     total_amount: transactions
       .filter(t => t.status === 'validated_tresorier')
-      .reduce((sum, t) => sum + t.amount, 0),
+      .reduce((sum, t) => sum + (t.amount ?? 0), 0),
   };
 
-  // Équipes et utilisateurs uniques pour les filtres
-  const teams = Array.from(new Set(
+  // Équipes uniques pour les filtres
+  const teams = Array.from(new Map(
     transactions
       .filter(t => t.team_name && t.team_id)
-      .map(t => ({ id: t.team_id!, name: t.team_name!, color: t.team_color! }))
-      .map(t => JSON.stringify(t))
-  )).map(t => JSON.parse(t));
-
-  const users = Array.from(new Set(
-    transactions
-      .filter(t => t.user_name && t.user_id)
-      .map(t => ({ id: t.user_id, name: t.user_name! }))
-      .map(t => JSON.stringify(t))
-  )).map(t => JSON.parse(t));
+      .map(t => ({ id: t.team_id!, name: t.team_name! }))
+      .map(team => [team.id, team])
+  ).values());
 
   // Gestion sélection
-  const handleSelectAll = () => {
+  const handleSelectAll = (selected: boolean) => {
     const selectableTransactions = filteredTransactions.filter(t =>
       t.status === 'pending' || t.status === 'validated_team'
     );
 
-    if (selectedTransactions.length === selectableTransactions.length) {
-      setSelectedTransactions([]);
-    } else {
+    if (selected) {
       setSelectedTransactions(selectableTransactions.map(t => t.id));
+    } else {
+      setSelectedTransactions([]);
+    }
+  };
+
+  const handleSelectRow = (id: string, selected: boolean) => {
+    if (selected) {
+      setSelectedTransactions([...selectedTransactions, id]);
+    } else {
+      setSelectedTransactions(selectedTransactions.filter(sid => sid !== id));
     }
   };
 
@@ -370,535 +393,446 @@ export default function AdminTransactionsPage() {
     setBulkNote('');
   };
 
-  if (isLoading) {
-    return (
-      <AdminGuard>
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Chargement des transactions...</p>
+  // Configuration des colonnes de table
+  const tableColumns = [
+    {
+      key: 'info',
+      title: 'Transaction',
+  render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {tx.receipt_number || `#${String(tx.id).slice(-8)}`}
+            </div>
+            <div className="text-sm text-gray-700">
+              {new Date(tx.created_at ?? '').toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </div>
+            {tx.donator_name && (
+              <div className="text-xs text-gray-600">
+                {tx.donator_name}
+              </div>
+            )}
           </div>
-        </div>
-      </AdminGuard>
-    );
-  }
+        );
+      }
+    },
+    {
+      key: 'team',
+      title: 'Équipe/Sapeur',
+  render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div className="flex items-center gap-2">
+            {tx.team_color && (
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: tx.team_color }}
+              />
+            )}
+            <div>
+              <div className="text-sm font-medium text-gray-900">
+                {tx.team_name || 'Aucune équipe'}
+              </div>
+              <div className="text-sm text-gray-700">
+                {tx.user_name}
+              </div>
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'amount',
+      title: 'Montant',
+      render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div>
+            <div className="text-sm font-bold text-gray-900">
+              {(tx.amount ?? 0).toFixed(2)}€
+            </div>
+            <div className="text-xs text-gray-600">
+              {tx.calendars_given} calendrier(s)
+            </div>
+          </div>
+        );
+      }
+    },
+    {
+      key: 'payment_method',
+      title: 'Paiement',
+      render: (_value: unknown) => {
+        const v = String(_value ?? '');
+        const style = getPaymentStyle(v as keyof typeof adminTheme.colors.payment);
+        return (
+          <span className={`px-2 py-1 text-xs rounded-full ${style.bg} ${style.text}`}>
+            {style.icon} {v === 'especes' ? 'Espèces' :
+              v === 'cheque' ? 'Chèque' :
+                v === 'carte' ? 'Carte' : 'Virement'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'status',
+      title: 'Statut',
+      render: (_value: unknown) => {
+        const v = String(_value ?? '');
+        const badge = createStatusBadge(v, {
+          pending: 'En attente',
+          validated_team: 'Valid. équipe',
+          validated_tresorier: 'Validé final',
+          cancelled: 'Annulé'
+        }[v] || v);
+        return (
+          <span className={badge.className}>
+            {badge.icon} {badge.text}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDetailModal(tx.id);
+              }}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Voir détails"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+
+            {(tx.status === 'pending' || tx.status === 'validated_team') && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    validateTransaction(tx.id, 'validate');
+                  }}
+                  className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-colors"
+                  title="Valider"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    validateTransaction(tx.id, 'reject');
+                  }}
+                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
+                  title="Rejeter"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
+    }
+  ];
 
   return (
-    <AdminGuard>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header Admin */}
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center gap-3">
-                <a href="/admin" className="text-gray-500 hover:text-gray-700">← Dashboard</a>
-                <div className="text-2xl">💳</div>
-                <h1 className="text-xl font-bold text-gray-900">Validation Transactions</h1>
-              </div>
-
-              <div className="flex gap-2">
-                {selectedTransactions.length > 0 && (
-                  <>
-                    <button
-                      onClick={() => handleBulkAction('validate')}
-                      className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm transition-colors"
-                    >
-                      Valider ({selectedTransactions.length})
-                    </button>
-                    <button
-                      onClick={() => handleBulkAction('reject')}
-                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
-                    >
-                      Rejeter ({selectedTransactions.length})
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={loadData}
-                  className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm transition-colors"
+    <AdminPage>
+      <AdminPageHeader
+        title="Validation Transactions"
+        subtitle="Gestion et validation des transactions"
+        icon={<CreditCard className="w-6 h-6" />}
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Transactions' }
+        ]}
+        actions={
+          <div className="flex gap-2">
+            {selectedTransactions.length > 0 && (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleBulkAction('validate')}
                 >
-                  Actualiser
-                </button>
-              </div>
-            </div>
+                  Valider ({selectedTransactions.length})
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => handleBulkAction('reject')}
+                >
+                  Rejeter ({selectedTransactions.length})
+                </Button>
+              </>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={loadData}
+            >
+              Actualiser
+            </Button>
           </div>
-        </header>
+        }
+      />
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Stats rapides */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-4 rounded-lg shadow">
-              <div className="text-2xl font-bold text-orange-600">{stats.pending}</div>
-              <div className="text-sm text-gray-600">En attente</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow">
-              <div className="text-2xl font-bold text-blue-600">{stats.validated_team}</div>
-              <div className="text-sm text-gray-600">Validées équipe</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow">
-              <div className="text-2xl font-bold text-green-600">{stats.validated_tresorier}</div>
-              <div className="text-sm text-gray-600">Validées final</div>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow">
-              <div className="text-2xl font-bold text-purple-600">{stats.total_amount.toFixed(2)}€</div>
-              <div className="text-sm text-gray-600">Montant validé</div>
-            </div>
-          </div>
+      <AdminContent>
+        {/* Stats rapides */}
+        <AdminSection>
+          <AdminGrid cols={4} gap="md">
+            <AdminStatCard
+              title="En attente"
+              value={stats.pending}
+              icon={<Clock className="w-8 h-8" />}
+              subtitle="À valider"
+              onClick={() => setStatusFilter('pending')}
+            />
+            <AdminStatCard
+              title="Validées équipe"
+              value={stats.validated_team}
+              icon={<Users className="w-8 h-8" />}
+              subtitle="En attente admin"
+              onClick={() => setStatusFilter('validated_team')}
+            />
+            <AdminStatCard
+              title="Validées final"
+              value={stats.validated_tresorier}
+              icon={<CheckCircle className="w-8 h-8" />}
+              subtitle="Terminées"
+              onClick={() => setStatusFilter('validated_tresorier')}
+            />
+            <AdminStatCard
+              title="Montant validé"
+              value={`${stats.total_amount.toFixed(2)}€`}
+              icon={<DollarSign className="w-8 h-8" />}
+              subtitle="Total confirmé"
+            />
+          </AdminGrid>
+        </AdminSection>
 
-          {/* Filtres étendus */}
-          <div className="bg-white rounded-lg shadow p-6 mb-6">
-            <div className="grid md:grid-cols-5 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="all">Tous les statuts</option>
-                  <option value="pending">En attente</option>
-                  <option value="validated_team">Validées équipe</option>
-                  <option value="validated_tresorier">Validées final</option>
-                  <option value="cancelled">Annulées</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Équipe</label>
-                <select
-                  value={teamFilter}
-                  onChange={(e) => setTeamFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="all">Toutes les équipes</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Sapeur</label>
-                <select
-                  value={userFilter}
-                  onChange={(e) => setUserFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="all">Tous les sapeurs</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Période</label>
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                >
-                  <option value="all">Toutes les dates</option>
-                  <option value="today">Aujourd'hui</option>
-                  <option value="week">7 derniers jours</option>
-                  <option value="month">30 derniers jours</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Recherche</label>
-                <input
-                  type="text"
-                  placeholder="Nom, donateur, n° reçu..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-            </div>
-
-            {/* Boutons de remise à zéro et stats */}
-            <div className="flex justify-between items-center pt-4 border-t">
-              <button
-                onClick={() => {
-                  setStatusFilter('all');
-                  setTeamFilter('all');
-                  setUserFilter('all');
-                  setDateFilter('all');
-                  setSearchTerm('');
-                }}
-                className="text-sm text-gray-600 hover:text-gray-800"
+        {/* Filtres */}
+        <AdminSection>
+          <AdminTableFilters
+            onReset={() => {
+              setStatusFilter('all');
+              setTeamFilter('all');
+              setDateFilter('all');
+              setSearchTerm('');
+            }}
+          >
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Statut</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
               >
-                Réinitialiser les filtres
-              </button>
-
-              <div className="text-sm text-gray-600">
-                {filteredTransactions.length} transaction(s) affichée(s) sur {transactions.length} • {selectedTransactions.length} sélectionnée(s)
-              </div>
+                <option value="all">Tous les statuts</option>
+                <option value="pending">En attente</option>
+                <option value="validated_team">Validées équipe</option>
+                <option value="validated_tresorier">Validées final</option>
+                <option value="cancelled">Annulées</option>
+              </select>
             </div>
-          </div>
 
-          {/* Table des transactions */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedTransactions.length === filteredTransactions.filter(t =>
-                          t.status === 'pending' || t.status === 'validated_team'
-                        ).length && filteredTransactions.filter(t =>
-                          t.status === 'pending' || t.status === 'validated_team'
-                        ).length > 0}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Équipe</label>
+              <select
+                value={teamFilter}
+                onChange={(e) => setTeamFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="all">Toutes les équipes</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Période</label>
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+              >
+                <option value="all">Toutes les dates</option>
+                <option value="today">Aujourd&apos;hui</option>
+                <option value="week">7 derniers jours</option>
+                <option value="month">30 derniers jours</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <Input
+                label="Recherche"
+                placeholder="Nom, donateur, n° reçu..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                leftIcon={
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+              />
+            </div>
+          </AdminTableFilters>
+        </AdminSection>
+
+        {/* Table des transactions */}
+        <AdminSection>
+          <AdminTable
+            columns={tableColumns}
+            data={filteredTransactions as unknown as Record<string, unknown>[]}
+            isLoading={isLoading}
+            selectedRows={selectedTransactions}
+            onSelectRow={handleSelectRow}
+            onSelectAll={handleSelectAll}
+            onRowClick={(row: Record<string, unknown>) => setShowDetailModal(String(row['id'] ?? null))}
+            emptyMessage="Aucune transaction trouvée avec ces critères"
+            emptyIcon={<CreditCard className="w-16 h-16" />}
+            rowKey="id"
+          />
+        </AdminSection>
+      </AdminContent>
+
+      {/* Modal action en lot */}
+      {showBulkModal && (
+        <AdminConfirmModal
+          isOpen={true}
+          onClose={() => setShowBulkModal(null)}
+          onConfirm={() => {
+            validateBulk(selectedTransactions, showBulkModal.action, bulkNote);
+            setShowBulkModal(null);
+          }}
+          title={`${showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'} ${selectedTransactions.length} transaction(s)`}
+          message={`Êtes-vous sûr de vouloir ${showBulkModal.action === 'validate' ? 'valider' : 'rejeter'} ces transactions ?`}
+          type={showBulkModal.action === 'validate' ? 'info' : 'danger'}
+          confirmText={showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'}
+        />
+      )}
+
+      {/* Modal détails transaction */}
+      {showDetailModal && (() => {
+        const transaction = transactions.find(t => t.id === showDetailModal);
+        if (!transaction) return null;
+
+        return (
+          <AdminModal
+            isOpen={true}
+            onClose={() => setShowDetailModal(null)}
+            title="Détails Transaction"
+            size="lg"
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <span className="text-sm text-gray-500">Montant</span>
+                  <div className="text-2xl font-bold text-gray-900">{(transaction.amount ?? 0).toFixed(2)}€</div>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Calendriers</span>
+                  <div className="text-2xl font-bold text-gray-900">{transaction.calendars_given ?? 0}</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <span className="text-sm text-gray-500">Sapeur</span>
+                  <div className="font-medium">{transaction.user_name}</div>
+                </div>
+
+                <div>
+                  <span className="text-sm text-gray-500">Équipe</span>
+                  <div className="font-medium flex items-center gap-2">
+                    {transaction.team_color && (
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: transaction.team_color }}
                       />
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Transaction
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Équipe/Sapeur
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Montant
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Paiement
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Statut
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4">
-                        {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
-                          <input
-                            type="checkbox"
-                            checked={selectedTransactions.includes(transaction.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedTransactions([...selectedTransactions, transaction.id]);
-                              } else {
-                                setSelectedTransactions(selectedTransactions.filter(id => id !== transaction.id));
-                              }
-                            }}
-                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
-                          />
-                        )}
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {transaction.receipt_number || `#${transaction.id.slice(-8)}`}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {new Date(transaction.created_at).toLocaleDateString('fr-FR', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
-                          {transaction.donator_name && (
-                            <div className="text-xs text-gray-500">
-                              {transaction.donator_name}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {transaction.team_color && (
-                            <div
-                              className="w-3 h-3 rounded-full"
-                              style={{ backgroundColor: transaction.team_color }}
-                            />
-                          )}
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {transaction.team_name || 'Aucune équipe'}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              {transaction.user_name}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-bold text-gray-900">
-                          {transaction.amount.toFixed(2)}€
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {transaction.calendars_given} calendrier(s)
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded-full ${transaction.payment_method === 'carte' ? 'bg-blue-100 text-blue-800' :
-                            transaction.payment_method === 'cheque' ? 'bg-yellow-100 text-yellow-800' :
-                              transaction.payment_method === 'especes' ? 'bg-green-100 text-green-800' :
-                                'bg-purple-100 text-purple-800'
-                          }`}>
-                          {transaction.payment_method === 'especes' ? 'Espèces' :
-                            transaction.payment_method === 'cheque' ? 'Chèque' :
-                              transaction.payment_method === 'carte' ? 'Carte' : 'Virement'}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs rounded-full ${transaction.status === 'pending' ? 'bg-orange-100 text-orange-800' :
-                            transaction.status === 'validated_team' ? 'bg-blue-100 text-blue-800' :
-                              transaction.status === 'validated_tresorier' ? 'bg-green-100 text-green-800' :
-                                'bg-red-100 text-red-800'
-                          }`}>
-                          {transaction.status === 'pending' ? 'En attente' :
-                            transaction.status === 'validated_team' ? 'Valid. équipe' :
-                              transaction.status === 'validated_tresorier' ? 'Validé final' : 'Annulé'}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => setShowDetailModal(transaction.id)}
-                            className="text-gray-600 hover:text-gray-800"
-                          >
-                            👁️
-                          </button>
-
-                          {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
-                            <>
-                              <button
-                                onClick={() => validateTransaction(transaction.id, 'validate')}
-                                className="text-green-600 hover:text-green-800"
-                              >
-                                ✅
-                              </button>
-                              <button
-                                onClick={() => validateTransaction(transaction.id, 'reject')}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                ❌
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Message si aucune transaction */}
-          {filteredTransactions.length === 0 && (
-            <div className="text-center py-12">
-              <div className="text-gray-400 text-6xl mb-4">💳</div>
-              <p className="text-gray-500">Aucune transaction trouvée</p>
-            </div>
-          )}
-
-          {/* Modal action en lot */}
-          {showBulkModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  {showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'} {selectedTransactions.length} transaction(s)
-                </h3>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Note (optionnelle)
-                  </label>
-                  <textarea
-                    value={bulkNote}
-                    onChange={(e) => setBulkNote(e.target.value)}
-                    rows={3}
-                    placeholder="Ajouter une note explicative..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowBulkModal(null);
-                      setBulkNote('');
-                    }}
-                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    onClick={() => {
-                      validateBulk(selectedTransactions, showBulkModal.action, bulkNote);
-                      setShowBulkModal(null);
-                      setBulkNote('');
-                    }}
-                    className={`flex-1 font-medium py-2 px-4 rounded-md transition-colors ${showBulkModal.action === 'validate'
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                        : 'bg-red-600 hover:bg-red-700 text-white'
-                      }`}
-                  >
-                    {showBulkModal.action === 'validate' ? 'Valider' : 'Rejeter'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Modal détails transaction */}
-          {showDetailModal && (() => {
-            const transaction = transactions.find(t => t.id === showDetailModal);
-            if (!transaction) return null;
-
-            return (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-xl p-6 w-full max-w-lg">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">
-                    Détails Transaction
-                  </h3>
-
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <span className="text-sm text-gray-500">Montant</span>
-                        <div className="font-bold text-lg">{transaction.amount.toFixed(2)}€</div>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-500">Calendriers</span>
-                        <div className="font-bold text-lg">{transaction.calendars_given}</div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-sm text-gray-500">Sapeur</span>
-                      <div className="font-medium">{transaction.user_name}</div>
-                    </div>
-
-                    <div>
-                      <span className="text-sm text-gray-500">Équipe</span>
-                      <div className="font-medium flex items-center gap-2">
-                        {transaction.team_color && (
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: transaction.team_color }}
-                          />
-                        )}
-                        {transaction.team_name || 'Aucune équipe'}
-                      </div>
-                    </div>
-
-                    {transaction.donator_name && (
-                      <div>
-                        <span className="text-sm text-gray-500">Donateur</span>
-                        <div className="font-medium">{transaction.donator_name}</div>
-                        {transaction.donator_email && (
-                          <div className="text-sm text-gray-500">{transaction.donator_email}</div>
-                        )}
-                      </div>
                     )}
-
-                    <div>
-                      <span className="text-sm text-gray-500">Mode de paiement</span>
-                      <div className="font-medium capitalize">
-                        {transaction.payment_method === 'especes' ? 'Espèces' :
-                          transaction.payment_method === 'cheque' ? 'Chèque' :
-                            transaction.payment_method === 'carte' ? 'Carte bancaire' : 'Virement'}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-sm text-gray-500">Date de création</span>
-                      <div className="font-medium">
-                        {new Date(transaction.created_at).toLocaleString('fr-FR')}
-                      </div>
-                    </div>
-
-                    {transaction.validated_team_at && (
-                      <div>
-                        <span className="text-sm text-gray-500">Validée équipe le</span>
-                        <div className="font-medium">
-                          {new Date(transaction.validated_team_at).toLocaleString('fr-FR')}
-                        </div>
-                      </div>
-                    )}
-
-                    {transaction.validated_tresorier_at && (
-                      <div>
-                        <span className="text-sm text-gray-500">Validée trésorier le</span>
-                        <div className="font-medium">
-                          {new Date(transaction.validated_tresorier_at).toLocaleString('fr-FR')}
-                        </div>
-                      </div>
-                    )}
-
-                    {transaction.notes && (
-                      <div>
-                        <span className="text-sm text-gray-500">Notes</span>
-                        <div className="text-sm bg-gray-50 p-2 rounded mt-1">
-                          {transaction.notes.split('\n').map((line, index) => (
-                            <div key={index}>{line}</div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-3 pt-6">
-                    <button
-                      onClick={() => setShowDetailModal(null)}
-                      className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
-                    >
-                      Fermer
-                    </button>
-
-                    {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
-                      <>
-                        <button
-                          onClick={() => {
-                            validateTransaction(transaction.id, 'validate');
-                            setShowDetailModal(null);
-                          }}
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-                        >
-                          Valider
-                        </button>
-                        <button
-                          onClick={() => {
-                            validateTransaction(transaction.id, 'reject');
-                            setShowDetailModal(null);
-                          }}
-                          className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-                        >
-                          Rejeter
-                        </button>
-                      </>
-                    )}
+                    {transaction.team_name || 'Aucune équipe'}
                   </div>
                 </div>
+
+                {transaction.donator_name && (
+                  <div>
+                    <span className="text-sm text-gray-500">Donateur</span>
+                    <div className="font-medium">{transaction.donator_name}</div>
+                    {transaction.donator_email && (
+                      <div className="text-sm text-gray-700">{transaction.donator_email}</div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-sm text-gray-500">Mode de paiement</span>
+                  <div className="font-medium capitalize">
+                    {transaction.payment_method === 'especes' ? 'Espèces' :
+                      transaction.payment_method === 'cheque' ? 'Chèque' :
+                        transaction.payment_method === 'carte' ? 'Carte bancaire' : 'Virement'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-sm text-gray-500">Date de création</span>
+                  <div className="font-medium">
+                    {new Date(transaction.created_at ?? '').toLocaleString('fr-FR')}
+                  </div>
+                </div>
+
+                {transaction.notes && (
+                  <div>
+                    <span className="text-sm text-gray-500">Notes</span>
+                    <div className="text-sm bg-gray-50 p-3 rounded-lg mt-1">
+                      {transaction.notes.split('\n').map((line, index) => (
+                        <div key={index}>{line}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            );
-          })()}
-        </main>
-      </div>
-    </AdminGuard>
+
+              {(transaction.status === 'pending' || transaction.status === 'validated_team') && (
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      validateTransaction(transaction.id, 'validate');
+                      setShowDetailModal(null);
+                    }}
+                    className="flex-1"
+                  >
+                    Valider
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      validateTransaction(transaction.id, 'reject');
+                      setShowDetailModal(null);
+                    }}
+                    className="flex-1"
+                  >
+                    Rejeter
+                  </Button>
+                </div>
+              )}
+            </div>
+          </AdminModal>
+        );
+      })()}
+    </AdminPage>
   );
 }
