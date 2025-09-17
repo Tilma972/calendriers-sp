@@ -15,7 +15,7 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
   const [password, setPassword] = useState('password123'); // Pré-rempli pour test
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(null);
   
   const { signIn, signUp, isLoading } = useAuthStore();
 
@@ -46,11 +46,12 @@ export function AuthForm({ mode, onToggleMode }: AuthFormProps) {
         directSignIn: { data: signInData, error: signInError?.message }
       });
       
-    } catch (err: any) {
-      console.error('Auth test error:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Auth test error:', message);
       setDebugInfo({
         ...health,
-        authError: err.message
+        authError: message
       });
     }
   };

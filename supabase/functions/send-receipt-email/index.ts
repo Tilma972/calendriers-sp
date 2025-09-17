@@ -1,4 +1,5 @@
 // supabase/functions/send-receipt-email/index.ts
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
 const SMTP_CONFIG = {
@@ -93,13 +94,14 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
-    } catch (smtpError: any) {
+    } catch (smtpError: unknown) {
       console.error('❌ Erreur SMTP:', smtpError)
-      
+      const message = smtpError instanceof Error ? smtpError.message : String(smtpError)
+
       return new Response(
         JSON.stringify({ 
           error: 'Erreur envoi SMTP', 
-          details: smtpError.message,
+          details: message,
           config: {
             host: SMTP_CONFIG.hostname,
             port: SMTP_CONFIG.port,
@@ -113,13 +115,14 @@ serve(async (req) => {
       )
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Erreur edge function:', error)
-    
+    const message = error instanceof Error ? error.message : String(error)
+
     return new Response(
       JSON.stringify({ 
         error: 'Erreur interne', 
-        details: error.message 
+        details: message 
       }),
       { 
         status: 500, 

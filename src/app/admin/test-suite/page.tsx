@@ -139,8 +139,8 @@ export default function AdminTestSuitePage() {
                 </div>
 
                 <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>💡 Conseil:</strong> Lancez d'abord le test rapide pour une validation de base, 
+                    <p className="text-sm text-blue-800">
+                    <strong>💡 Conseil:</strong> Lancez d&apos;abord le test rapide pour une validation de base, 
                     puis les tests complets avant la mise en production.
                   </p>
                 </div>
@@ -226,13 +226,21 @@ export default function AdminTestSuitePage() {
                           {result.message}
                         </p>
                         
-                        {result.details && (
+                        {result.details != null && (
                           <details className="text-xs text-gray-500">
                             <summary className="cursor-pointer hover:text-gray-700">
                               Voir les détails
                             </summary>
                             <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto">
-                              {JSON.stringify(result.details, null, 2)}
+                              {(() => {
+                                try {
+                                  return typeof result.details === 'string'
+                                    ? result.details
+                                    : JSON.stringify(result.details, null, 2);
+                                } catch {
+                                  return String(result.details);
+                                }
+                              })()}
                             </pre>
                           </details>
                         )}
@@ -265,8 +273,8 @@ export default function AdminTestSuitePage() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">
                     Prêt pour les Tests
                   </h3>
-                  <p className="text-gray-600 mb-6">
-                    Lancez les tests pour valider la refactorisation de l'interface admin
+                    <p className="text-gray-600 mb-6">
+                    Lancez les tests pour valider la refactorisation de l&apos;interface admin
                   </p>
                   <div className="flex gap-3 justify-center">
                     <Button variant="secondary" onClick={runQuickTest}>

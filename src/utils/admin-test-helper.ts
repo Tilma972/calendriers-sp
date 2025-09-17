@@ -5,7 +5,40 @@ export interface TestResult {
   test: string;
   status: 'success' | 'error' | 'warning';
   message: string;
-  details?: any;
+  details?: unknown;
+}
+
+// Small local row types to avoid broad `any` usage in tests
+interface ProfileRow {
+  id?: string;
+  email?: string;
+  role?: string;
+  is_active?: boolean | null;
+}
+
+interface TransactionRow {
+  id?: string;
+  amount?: number | null;
+  status?: string | null;
+  created_at?: string | null;
+}
+
+interface TeamRow {
+  id?: string;
+  name?: string | null;
+  color?: string | null;
+  chef_id?: string | null;
+}
+
+function extractErrorMessage(err: unknown): string {
+  if (!err) return '';
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'object' && err !== null) {
+    const maybe = err as Record<string, unknown>;
+    if (typeof maybe.message === 'string') return maybe.message;
+    if (typeof maybe.error === 'string') return maybe.error;
+  }
+  return String(err);
 }
 
 export class AdminTestSuite {
@@ -14,13 +47,13 @@ export class AdminTestSuite {
   // Test de connectivité base de données
   async testDatabaseConnection(): Promise<TestResult> {
     try {
-      const { data, error } = await supabase.from('profiles').select('id').limit(1);
-      
+  const { data, error } = await supabase.from('profiles').select('id').limit(1);
+
       if (error) {
         return {
           test: 'Database Connection',
           status: 'error',
-          message: `Erreur connexion DB: ${error.message}`,
+          message: `Erreur connexion DB: ${extractErrorMessage(error)}`,
           details: error
         };
       }
@@ -28,13 +61,14 @@ export class AdminTestSuite {
       return {
         test: 'Database Connection',
         status: 'success',
-        message: 'Connexion base de données OK'
+        message: `Connexion base de données OK (${data?.length || 0} row(s))`
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         test: 'Database Connection',
         status: 'error',
-        message: `Erreur critique DB: ${error.message}`,
+        message: `Erreur critique DB: ${message}`,
         details: error
       };
     }
@@ -54,7 +88,7 @@ export class AdminTestSuite {
       tests.push({
         test: 'Load Users Data',
         status: usersError ? 'error' : 'success',
-        message: usersError ? `Erreur users: ${usersError.message}` : `${users?.length || 0} utilisateurs chargés`,
+        message: usersError ? `Erreur users: ${extractErrorMessage(usersError)}` : `${users?.length || 0} utilisateurs chargés`,
         details: usersError || { count: users?.length }
       });
 
@@ -67,28 +101,29 @@ export class AdminTestSuite {
       tests.push({
         test: 'Load Transactions Data',
         status: transactionsError ? 'error' : 'success',
-        message: transactionsError ? `Erreur transactions: ${transactionsError.message}` : `${transactions?.length || 0} transactions chargées`,
+        message: transactionsError ? `Erreur transactions: ${extractErrorMessage(transactionsError)}` : `${transactions?.length || 0} transactions chargées`,
         details: transactionsError || { count: transactions?.length }
       });
 
       // Test chargement équipes
       const { data: teams, error: teamsError } = await supabase
         .from('teams')
-        .select('id, name, color')
+        .select('id, name, color, chef_id')
         .limit(5);
 
       tests.push({
         test: 'Load Teams Data',
         status: teamsError ? 'error' : 'success',
-        message: teamsError ? `Erreur teams: ${teamsError.message}` : `${teams?.length || 0} équipes chargées`,
+        message: teamsError ? `Erreur teams: ${extractErrorMessage(teamsError)}` : `${teams?.length || 0} équipes chargées`,
         details: teamsError || { count: teams?.length }
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       tests.push({
         test: 'Admin Data Load',
         status: 'error',
-        message: `Erreur globale: ${error.message}`,
+        message: `Erreur globale: ${message}`,
         details: error
       });
     }
@@ -109,12 +144,16 @@ export class AdminTestSuite {
         supabase.from('teams').select('id, chef_id')
       ]);
 
+      const usersData = (usersResult.data ?? []) as ProfileRow[];
+      const transactionsData = (transactionsResult.data ?? []) as TransactionRow[];
+      const teamsData = (teamsResult.data ?? []) as TeamRow[];
+
       const stats = {
-        users_total: usersResult.data?.length || 0,
-        users_active: usersResult.data?.filter(u => u.is_active).length || 0,
-        transactions_today: transactionsResult.data?.length || 0,
-        teams_total: teamsResult.data?.length || 0,
-        teams_with_chef: teamsResult.data?.filter(t => t.chef_id).length || 0
+        users_total: usersData.length || 0,
+        users_active: usersData.filter((u: ProfileRow) => Boolean(u?.is_active)).length || 0,
+        transactions_today: transactionsData.length || 0,
+        teams_total: teamsData.length || 0,
+        teams_with_chef: teamsData.filter((t: TeamRow) => Boolean(t?.chef_id)).length || 0
       };
 
       return {
@@ -124,11 +163,12 @@ export class AdminTestSuite {
         details: stats
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         test: 'Dashboard Statistics',
         status: 'error',
-        message: `Erreur calcul stats: ${error.message}`,
+        message: `Erreur calcul stats: ${message}`,
         details: error
       };
     }
@@ -150,11 +190,12 @@ export class AdminTestSuite {
         message: `Temps de chargement: ${userLoadTime}ms`,
         details: { loadTime: userLoadTime }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       tests.push({
         test: 'Users Load Performance',
         status: 'error',
-        message: `Erreur perf users: ${error.message}`,
+        message: `Erreur perf users: ${message}`,
         details: error
       });
     }
@@ -171,11 +212,12 @@ export class AdminTestSuite {
         message: `Temps de chargement: ${transactionLoadTime}ms`,
         details: { loadTime: transactionLoadTime }
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       tests.push({
         test: 'Transactions Load Performance',
         status: 'error',
-        message: `Erreur perf transactions: ${error.message}`,
+        message: `Erreur perf transactions: ${message}`,
         details: error
       });
     }
@@ -189,7 +231,7 @@ export class AdminTestSuite {
 
     try {
       // Vérifier que les tables admin sont accessibles
-      const { data: profiles, error: profilesError } = await supabase
+      const { error: profilesError } = await supabase
         .from('profiles')
         .select('id')
         .limit(1);
@@ -197,29 +239,29 @@ export class AdminTestSuite {
       tests.push({
         test: 'Admin Table Access',
         status: profilesError ? 'error' : 'success',
-        message: profilesError ? `Accès refusé profiles: ${profilesError.message}` : 'Accès tables admin OK',
+        message: profilesError ? `Accès refusé profiles: ${extractErrorMessage(profilesError)}` : 'Accès tables admin OK',
         details: profilesError
       });
 
       // Test session utilisateur
-      const { data: session, error: sessionError } = await supabase.auth.getSession();
-      
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
       tests.push({
         test: 'User Session',
-        status: sessionError ? 'error' : session.session ? 'success' : 'warning',
-        message: sessionError ? `Erreur session: ${sessionError.message}` : 
-                 session.session ? 'Session active' : 'Aucune session active',
+        status: sessionError ? 'error' : sessionData.session ? 'success' : 'warning',
+        message: sessionError ? `Erreur session: ${extractErrorMessage(sessionError)}` : sessionData.session ? 'Session active' : 'Aucune session active',
         details: { 
-          hasSession: !!session.session,
-          userId: session.session?.user?.id
+          hasSession: !!sessionData.session,
+          userId: sessionData.session?.user?.id
         }
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       tests.push({
         test: 'Security Permissions',
         status: 'error',
-        message: `Erreur sécurité: ${error.message}`,
+        message: `Erreur sécurité: ${message}`,
         details: error
       });
     }

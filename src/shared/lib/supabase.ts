@@ -64,9 +64,13 @@ export const checkSupabaseHealth = async () => {
       return { healthy: false, error: error.message };
     }
     return { healthy: true, error: null };
-  } catch (error: any) {
-    console.error('Supabase connection error:', error);
-    return { healthy: false, error: error.message };
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('Supabase connection error:', error);
+      return { healthy: false, error: error.message };
+    }
+    console.error('Supabase connection error:', String(error));
+    return { healthy: false, error: String(error) };
   }
 };
 
@@ -80,8 +84,12 @@ export const getSupabaseSession = async (retries = 3) => {
         continue;
       }
       return session;
-    } catch (error) {
-      console.error(`Session connection error (attempt ${i + 1}):`, error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error(`Session connection error (attempt ${i + 1}):`, error);
+      } else {
+        console.error(`Session connection error (attempt ${i + 1}):`, String(error));
+      }
       if (i === retries - 1) return null;
       await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
     }
@@ -105,8 +113,12 @@ export const getCurrentUserProfile = async () => {
       return null;
     }
     return profile;
-  } catch (error) {
-    console.error('Profile fetch connection error:', error);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('Profile fetch connection error:', error);
+    } else {
+      console.error('Profile fetch connection error:', String(error));
+    }
     return null;
   }
 };

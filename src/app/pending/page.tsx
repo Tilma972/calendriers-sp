@@ -41,7 +41,7 @@ export default function PendingValidationPage() {
             Bonjour <strong>{profile.full_name}</strong>,
           </p>
           <p>
-            Votre inscription a bien été prise en compte ! Votre compte est actuellement en attente de validation par un administrateur.
+            Votre inscription a bien &eacute;t&eacute; prise en compte ! Votre compte est actuellement en attente de validation par un administrateur.
           </p>
           <p className="text-sm text-gray-600">
             Vous recevrez une notification par email dès que votre compte sera activé.
@@ -55,7 +55,7 @@ export default function PendingValidationPage() {
             <div><strong>Email :</strong> {user.email}</div>
             <div><strong>Nom :</strong> {profile.full_name}</div>
             <div><strong>Rôle demandé :</strong> {profile.role?.replace('_', ' ') || 'Sapeur'}</div>
-            <div><strong>Date d'inscription :</strong> {new Date(user.created_at).toLocaleDateString('fr-FR')}</div>
+            <div><strong>Date d&apos;inscription :</strong> {new Date(user.created_at).toLocaleDateString('fr-FR')}</div>
           </div>
         </div>
 
@@ -86,7 +86,7 @@ export default function PendingValidationPage() {
         {/* Contact */}
         <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-xs text-gray-500">
-            En cas de problème, contactez votre trésorier ou l'administration.
+            En cas de probl&egrave;me, contactez votre tr&eacute;sorier ou l&apos;administration.
           </p>
         </div>
 

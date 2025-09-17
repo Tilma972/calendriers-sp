@@ -1,7 +1,7 @@
 // Page de test pour le design system admin - TEMPORAIRE
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AdminGuard } from '@/shared/components/AdminGuard';
 import { 
   AdminPage, 
@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/admin';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { adminTheme, createStatusBadge, getPaymentStyle } from '@/components/ui/admin/admin-theme';
+import { adminTheme, createStatusBadge } from '@/components/ui/admin/admin-theme';
 
 const DesignTestPage = () => {
   const [showModal, setShowModal] = useState(false);
@@ -38,11 +38,13 @@ const DesignTestPage = () => {
     { 
       key: 'role', 
       title: 'Rôle',
-      render: (value: string) => {
-        const style = adminTheme.colors.roles[value as keyof typeof adminTheme.colors.roles];
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      render: (value: unknown, _row: Record<string, unknown>, _index: number) => {
+        const sval = String(value ?? '');
+        const style = adminTheme.colors.roles[sval as keyof typeof adminTheme.colors.roles];
         return (
           <span className={`px-2 py-1 text-xs font-medium rounded-full ${style?.bg} ${style?.text}`}>
-            {style?.icon} {value.replace('_', ' ')}
+            {style?.icon} {sval.replace('_', ' ')}
           </span>
         );
       }
@@ -50,8 +52,10 @@ const DesignTestPage = () => {
     { 
       key: 'status', 
       title: 'Statut',
-      render: (value: string) => {
-        const badge = createStatusBadge(value);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      render: (value: unknown, _row: Record<string, unknown>, _index: number) => {
+        const s = String(value ?? '');
+        const badge = createStatusBadge(s);
         return (
           <span className={badge.className}>
             {badge.icon} {badge.text}
@@ -320,7 +324,7 @@ const DesignTestPage = () => {
                 </label>
                 <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
                   <option>Sapeur</option>
-                  <option>Chef d'équipe</option>
+                  <option>Chef d&apos;équipe</option>
                   <option>Trésorier</option>
                 </select>
               </div>

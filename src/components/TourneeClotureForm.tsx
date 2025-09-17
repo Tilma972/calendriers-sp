@@ -10,8 +10,15 @@ interface ClotureData {
   calendarsVendus: number;
 }
 
+interface Tournee {
+  tournee_id: string;
+  team_id?: string;
+  team_name?: string;
+  team_color?: string;
+}
+
 interface TourneeClotureFormProps {
-  tourneeActive: any;
+  tourneeActive?: Tournee | null;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -91,9 +98,10 @@ export default function TourneeClotureForm({
         onSuccess();
       }
 
-    } catch (error) {
-      console.error('Erreur clôture tournée:', error);
-      alert('❌ Erreur lors de la clôture: ' + (error as Error).message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erreur clôture tournée:', message);
+      alert('❌ Erreur lors de la clôture: ' + message);
     } finally {
       setSubmitInProgress(false);
     }

@@ -57,10 +57,17 @@ export async function POST(request: NextRequest) {
       status: 'pending'
     });
 
-  } catch (error: any) {
-    console.error('❌ Error in QR initiate API:', error);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error('❌ Error in QR initiate API:', error);
+      return NextResponse.json(
+        { error: 'Internal server error: ' + error.message },
+        { status: 500 }
+      );
+    }
+    console.error('❌ Error in QR initiate API:', String(error));
     return NextResponse.json(
-      { error: 'Internal server error: ' + error.message },
+      { error: 'Internal server error: ' + String(error) },
       { status: 500 }
     );
   }

@@ -42,18 +42,18 @@ export default function QRCodeDisplay({
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [error, setError] = useState<string>('');
   
-  // Refs pour les timers
-  const countdownTimer = useRef<NodeJS.Timeout | null>(null);
-  const statusCheckTimer = useRef<NodeJS.Timeout | null>(null);
-  const realtimeSubscription = useRef<any>(null);
+  // Refs pour les timers (ReturnType<typeof setInterval> covers both Node and browser)
+  const countdownTimer = useRef<number | ReturnType<typeof setInterval> | null>(null);
+  const statusCheckTimer = useRef<number | ReturnType<typeof setInterval> | null>(null);
+  const realtimeSubscription = useRef<{ unsubscribe?: () => void } | null>(null);
 
   // Nettoyer les timers à la destruction du composant
   useEffect(() => {
     return () => {
-      if (countdownTimer.current) clearInterval(countdownTimer.current);
-      if (statusCheckTimer.current) clearInterval(statusCheckTimer.current);
+        if (countdownTimer.current) window.clearInterval(countdownTimer.current as unknown as number);
+        if (statusCheckTimer.current) window.clearInterval(statusCheckTimer.current as unknown as number);
       if (realtimeSubscription.current) {
-        realtimeSubscription.current.unsubscribe();
+        try { realtimeSubscription.current.unsubscribe?.(); } catch {}
       }
     };
   }, []);
@@ -114,9 +114,10 @@ export default function QRCodeDisplay({
       // S'abonner aux notifications temps réel
       subscribeToRealtimeNotifications(interaction.interaction_id);
 
-    } catch (err: any) {
-      console.error('Error generating QR code:', err);
-      setError(err.message || 'Erreur lors de la génération du QR code');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Error generating QR code:', message);
+      setError(message || 'Erreur lors de la génération du QR code');
       setStatus('error');
       playPaymentError();
     }
@@ -144,48 +145,55 @@ export default function QRCodeDisplay({
     // Mise à jour immédiate
     updateCountdown();
     
-    // Puis toutes les secondes
-    countdownTimer.current = setInterval(updateCountdown, 1000);
+  // Puis toutes les secondes
+  countdownTimer.current = window.setInterval(updateCountdown, 1000);
   };
 
   // Monitoring périodique du statut dans la base
   const startStatusMonitoring = (interactionId: string) => {
-    statusCheckTimer.current = setInterval(async () => {
+  statusCheckTimer.current = window.setInterval(async () => {
       try {
-        const { data, error } = await supabase
-          .from('qr_interactions')
-          .select('status, donator_name, donator_email, completed_at')
-          .eq('interaction_id', interactionId)
-          .single();
+          const res = await supabase
+            .from('qr_interactions')
+            .select('status, donator_name, donator_email, completed_at, transaction_id')
+            .eq('interaction_id', interactionId)
+            .single();
 
-        if (error) {
-          console.error('Error checking QR status:', error);
-          return;
-        }
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const row = (res as any).data;
+    const error = (res as any).error;
 
-        if (data?.status === 'completed') {
-          setStatus('completed');
-          setQrInteraction(prev => prev ? { ...prev, ...data } : null);
-          
-          // Jouer le son de succès
-          playPaymentSuccess();
-          
-          if (statusCheckTimer.current) {
-            clearInterval(statusCheckTimer.current);
+          if (error) {
+            console.error('Error checking QR status:', error);
+            return;
           }
-          
-          // Notifier le parent
-          onSuccess?.(data.transaction_id);
-        } else if (data?.status === 'expired') {
-          setStatus('expired');
-          onExpired?.();
-          
-          if (statusCheckTimer.current) {
-            clearInterval(statusCheckTimer.current);
+
+          if (row?.status === 'completed') {
+            setStatus('completed');
+            setQrInteraction(prev => prev ? { ...prev, ...(row as any) } : null);
+
+            // Jouer le son de succès
+            playPaymentSuccess();
+
+            if (statusCheckTimer.current) {
+              window.clearInterval(statusCheckTimer.current as unknown as number);
+            }
+
+            // Notifier le parent (safe access)
+            const txId = (row as any)?.transaction_id;
+          /* eslint-enable @typescript-eslint/no-explicit-any */
+            if (typeof txId === 'string') onSuccess?.(txId);
+          } else if (row?.status === 'expired') {
+            setStatus('expired');
+            onExpired?.();
+
+            if (statusCheckTimer.current) {
+              clearInterval(statusCheckTimer.current as unknown as number);
+            }
           }
-        }
-      } catch (err: any) {
-        console.error('Error monitoring QR status:', err);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('Error monitoring QR status:', message);
       }
     }, 3000); // Vérifier toutes les 3 secondes
   };
@@ -193,33 +201,36 @@ export default function QRCodeDisplay({
   // S'abonner aux notifications temps réel Supabase
   const subscribeToRealtimeNotifications = (interactionId: string) => {
     const channel = supabase.channel('qr-payments')
-      .on('broadcast', { event: 'qr_payment_completed' }, (payload) => {
-        if (payload.payload.interactionId === interactionId) {
-          console.log('🎉 QR payment completed via realtime!', payload.payload);
-          
+      .on('broadcast', { event: 'qr_payment_completed' }, (payload: unknown) => {
+        const pl = payload as { payload?: Record<string, unknown> };
+        const pay = pl.payload ?? {};
+        if ((pay.interactionId as string) === interactionId) {
+          console.log('🎉 QR payment completed via realtime!', pay);
+
           setStatus('completed');
           setQrInteraction(prev => prev ? {
             ...prev,
             status: 'completed',
-            donator_name: payload.payload.donatorName,
-            donator_email: payload.payload.donatorEmail
+            donator_name: (pay.donatorName as string) || undefined,
+            donator_email: (pay.donatorEmail as string) || undefined
           } : null);
-          
+
           // Jouer le son de succès
           playPaymentSuccess();
-          
+
           // Arrêter le monitoring
           if (statusCheckTimer.current) {
             clearInterval(statusCheckTimer.current);
           }
-          
+
           // Notifier le parent
-          onSuccess?.(payload.payload.transactionId);
+          const tid = pay.transactionId as string | undefined;
+          if (tid) onSuccess?.(tid);
         }
       })
       .subscribe();
 
-    realtimeSubscription.current = channel;
+  realtimeSubscription.current = { unsubscribe: () => { try { (channel as unknown as { unsubscribe?: () => void }).unsubscribe?.(); } catch {} } };
   };
 
   // Reset pour générer un nouveau QR code
@@ -228,7 +239,7 @@ export default function QRCodeDisplay({
     if (countdownTimer.current) clearInterval(countdownTimer.current);
     if (statusCheckTimer.current) clearInterval(statusCheckTimer.current);
     if (realtimeSubscription.current) {
-      realtimeSubscription.current.unsubscribe();
+      realtimeSubscription.current.unsubscribe?.();
     }
 
     // Reset state
@@ -403,7 +414,7 @@ export default function QRCodeDisplay({
             QR Code expiré
           </h4>
           <p className="text-red-700 mb-6">
-            Ce QR code a expiré après 10 minutes d'inactivité.
+            Ce QR code a expiré après 10 minutes d&apos;inactivité.
             Générez-en un nouveau pour continuer.
           </p>
           <button

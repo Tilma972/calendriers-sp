@@ -35,7 +35,9 @@ export default function QRRedirectPage() {
       return;
     }
 
-    loadInteraction();
+    // call loader
+    (async () => { await loadInteraction(); })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interactionId]);
 
   // Timer pour countdown
@@ -63,6 +65,7 @@ export default function QRRedirectPage() {
       setLoading(true);
       
       // Récupérer l'interaction avec les informations de l'équipe
+      const id = String(interactionId);
       const { data, error } = await supabase
         .from('qr_interactions')
         .select(`
@@ -73,7 +76,7 @@ export default function QRRedirectPage() {
             stripe_payment_link_url
           )
         `)
-        .eq('interaction_id', interactionId)
+  .eq('interaction_id', id)
         .single();
 
       if (error) {
@@ -88,8 +91,8 @@ export default function QRRedirectPage() {
       }
 
       // Vérifier si l'interaction n'a pas déjà expiré
-      const now = new Date().getTime();
-      const expiration = new Date(data.expires_at).getTime();
+  const now = new Date().getTime();
+  const expiration = new Date(data.expires_at ?? '').getTime();
       
       if (now > expiration && data.status === 'pending') {
         setError('Ce QR code a expiré');
@@ -97,15 +100,15 @@ export default function QRRedirectPage() {
       }
 
       const interactionData: QRInteraction = {
-        interaction_id: data.interaction_id,
-        team_id: data.team_id,
-        team_name: data.teams?.name || 'Équipe inconnue',
-        team_color: data.teams?.color || '#dc2626',
-        status: data.status,
-        expires_at: data.expires_at,
-        amount: data.amount || 10,
-        calendars_count: data.calendars_count || 1,
-        stripe_payment_link_url: data.teams?.stripe_payment_link_url
+        interaction_id: String(data.interaction_id),
+        team_id: String(data.team_id),
+        team_name: data.teams?.name ?? 'Équipe inconnue',
+        team_color: data.teams?.color ?? '#dc2626',
+        status: (data.status as QRInteraction['status']) ?? 'pending',
+        expires_at: String(data.expires_at ?? ''),
+        amount: Number(data.amount ?? 10),
+        calendars_count: Number(data.calendars_count ?? 1),
+        stripe_payment_link_url: data.teams?.stripe_payment_link_url ?? undefined
       };
 
       setInteraction(interactionData);
@@ -127,8 +130,9 @@ export default function QRRedirectPage() {
         return;
       }
 
-    } catch (err: any) {
-      console.error('Error in loadInteraction:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Error in loadInteraction:', message);
       setError('Erreur lors du chargement de l\'interaction');
     } finally {
       setLoading(false);
@@ -156,8 +160,9 @@ export default function QRRedirectPage() {
       // Redirection vers Stripe
       window.location.href = stripeUrl.toString();
       
-    } catch (err: any) {
-      console.error('Error redirecting to Stripe:', err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Error redirecting to Stripe:', message);
       setError('Erreur lors de la redirection vers le paiement');
       setRedirecting(false);
     }

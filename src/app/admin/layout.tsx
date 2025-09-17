@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { cn } from '@/shared/lib/utils';
-import { adminClassNames } from '@/components/ui/admin/admin-theme';
 import { 
   BarChart3, 
   Users, 
@@ -199,7 +198,7 @@ const AdminSidebar = ({ isMenuOpen, setIsMenuOpen }: {
             className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Retour à l'app</span>
+            <span>Retour à l&apos;app</span>
           </Link>
           
           <button

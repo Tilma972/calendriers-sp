@@ -24,7 +24,8 @@ import {
   Pause, 
   DollarSign,
   Shield,
-  UserCheck
+  UserCheck,
+  Plus
 } from 'lucide-react';
 
 interface User {
@@ -34,14 +35,14 @@ interface User {
   role: 'sapeur' | 'chef_equipe' | 'tresorier';
   team_id: string | null;
   team_name: string | null;
-  is_active: boolean;
-  created_at: string;
+  is_active: boolean | null;
+  created_at: string | null;
 }
 
 interface Team {
   id: string;
   name: string;
-  color: string;
+  color: string | null;
 }
 
 // Hook personnalisé pour la gestion des utilisateurs admin (même logique que l'original)
@@ -102,9 +103,10 @@ function useAdminUsers() {
         setTeams(teamsData);
       }
 
-    } catch (error: any) {
+      } catch (error: unknown) {
       console.error('Erreur chargement données:', error);
-      toast.error(`Erreur: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +148,7 @@ function useAdminUsers() {
       toast.success(`${actionText} avec succès`, { id: `update-${userId}` });
       setTimeout(() => loadData(), 500);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback
       setUsers(prev =>
         prev.map(user =>
@@ -154,8 +156,9 @@ function useAdminUsers() {
         )
       );
 
+      const message = error instanceof Error ? error.message : String(error);
       console.error('Erreur mise à jour:', error);
-      toast.error(`Erreur: ${error.message}`, { id: `update-${userId}` });
+      toast.error(`Erreur: ${message}`, { id: `update-${userId}` });
     }
   };
 
@@ -176,14 +179,14 @@ export default function AdminUsersPageNew() {
   const [newUser, setNewUser] = useState({
     email: '',
     full_name: '',
-    role: 'sapeur' as const,
+    role: 'sapeur' as 'sapeur' | 'chef_equipe' | 'tresorier',
     team_id: '',
     password: '',
   });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Fonction de création utilisateur (même logique que l'original)
   const handleCreateUser = async () => {
@@ -238,9 +241,10 @@ export default function AdminUsersPageNew() {
       setShowCreateForm(false);
       loadData();
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erreur création:', error);
-      toast.error(`Erreur: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     }
   };
 
@@ -256,9 +260,10 @@ export default function AdminUsersPageNew() {
       toast.success('Email de réinitialisation envoyé');
       setShowResetModal(null);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Erreur reset password:', error);
-      toast.error(`Erreur: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Erreur: ${message}`);
     }
   };
 
@@ -291,28 +296,33 @@ export default function AdminUsersPageNew() {
     {
       key: 'user',
       title: 'Utilisateur',
-      render: (value: any, row: User) => (
-        <div>
-          <div className="text-sm font-medium text-gray-900">
-            {row.full_name}
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {u.full_name}
+            </div>
+            <div className="text-sm text-gray-700">{u.email}</div>
           </div>
-          <div className="text-sm text-gray-700">{row.email}</div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'role',
       title: 'Rôle',
-      render: (value: string, row: User) => {
-        const style = getRoleStyle(value as keyof typeof adminTheme.colors.roles);
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const v = String(value ?? '');
+        const u = row as unknown as User;
+        const style = getRoleStyle(v as keyof typeof adminTheme.colors.roles);
         return (
           <div className="flex items-center gap-2">
             <span className={`px-2 py-1 text-xs font-medium rounded-full ${style.bg} ${style.text}`}>
-              {style.icon} {value.replace('_', ' ')}
+              {style.icon} {String(value ?? '').replace('_', ' ')}
             </span>
             <select
-              value={row.role}
-              onChange={(e) => updateUser(row.id, { role: e.target.value as any })}
+              value={u.role}
+              onChange={(e) => updateUser(u.id, { role: e.target.value as 'sapeur' | 'chef_equipe' | 'tresorier' })}
               className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
               onClick={(e) => e.stopPropagation()}
             >
@@ -327,69 +337,78 @@ export default function AdminUsersPageNew() {
     {
       key: 'team',
       title: 'Équipe',
-      render: (value: any, row: User) => (
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-900">
-            {row.team_name || 'Aucune équipe'}
-          </span>
-          <select
-            value={row.team_id || ''}
-            onChange={(e) => updateUser(row.id, { team_id: e.target.value || null })}
-            className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <option value="">Aucune équipe</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-900">
+              {u.team_name || 'Aucune équipe'}
+            </span>
+            <select
+              value={u.team_id || ''}
+              onChange={(e) => updateUser(u.id, { team_id: e.target.value || null })}
+              className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-red-500 focus:border-red-500"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <option value="">Aucune équipe</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
     },
     {
       key: 'status',
       title: 'Statut',
-      render: (value: any, row: User) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            updateUser(row.id, { is_active: !row.is_active });
-          }}
-          className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-            row.is_active
-              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-              : 'bg-red-100 text-red-800 hover:bg-red-200'
-          }`}
-        >
-          {row.is_active ? 'Actif' : 'Inactif'}
-        </button>
-      )
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              updateUser(u.id, { is_active: !u.is_active });
+            }}
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+              u.is_active
+                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                : 'bg-red-100 text-red-800 hover:bg-red-200'
+            }`}
+          >
+            {u.is_active ? 'Actif' : 'Inactif'}
+          </button>
+        );
+      }
     },
     {
       key: 'created_at',
       title: 'Créé le',
-      render: (value: string) => (
+      render: (value: unknown) => (
         <span className="text-sm text-gray-700">
-          {new Date(value).toLocaleDateString('fr-FR')}
+          {value ? new Date(String(value)).toLocaleDateString('fr-FR') : '—'}
         </span>
       )
     },
     {
       key: 'actions',
       title: 'Actions',
-      render: (value: any, row: User) => (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowResetModal(row.id);
-          }}
-          className="text-blue-600 hover:text-blue-800 text-sm hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-        >
-          Reset MDP
-        </button>
-      )
+      render: (value: unknown, row: Record<string, unknown>) => {
+        const u = row as unknown as User;
+        return (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowResetModal(u.id);
+            }}
+            className="text-blue-600 hover:text-blue-800 text-sm hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+          >
+            Reset MDP
+          </button>
+        );
+      }
     }
   ];
 
@@ -409,6 +428,7 @@ export default function AdminUsersPageNew() {
             size="sm"
             onClick={() => setShowCreateForm(true)}
           >
+            <Plus className="w-4 h-4 mr-2" />
             Nouvel Utilisateur
           </Button>
         }
@@ -489,7 +509,7 @@ export default function AdminUsersPageNew() {
               >
                 <option value="all">Tous les rôles</option>
                 <option value="sapeur">Sapeurs</option>
-                <option value="chef_equipe">Chefs d'équipe</option>
+                <option value="chef_equipe">Chefs d&apos;&eacute;quipe</option>
                 <option value="tresorier">Trésoriers</option>
               </select>
             </div>
@@ -529,7 +549,7 @@ export default function AdminUsersPageNew() {
         <AdminSection>
           <AdminTable
             columns={tableColumns}
-            data={filteredUsers}
+            data={filteredUsers as unknown as Record<string, unknown>[]}
             isLoading={isLoading}
             emptyMessage="Aucun utilisateur trouvé avec ces critères"
             emptyIcon={<Users className="w-16 h-16" />}
@@ -584,11 +604,11 @@ export default function AdminUsersPageNew() {
               </label>
               <select
                 value={newUser.role}
-                onChange={(e) => setNewUser({ ...newUser, role: e.target.value as any })}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'sapeur' | 'chef_equipe' | 'tresorier' })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
               >
                 <option value="sapeur">Sapeur</option>
-                <option value="chef_equipe">Chef d'équipe</option>
+                <option value="chef_equipe">Chef d&apos;&eacute;quipe</option>
                 <option value="tresorier">Trésorier</option>
               </select>
             </div>

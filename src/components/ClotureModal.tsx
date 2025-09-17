@@ -20,8 +20,28 @@ import {
 } from 'lucide-react';
 import DonsDetailsList from './DonsDetailsList';
 
+interface TourneeActive {
+  tournee_id?: string;
+}
+
+interface DonDetaille {
+  id: string;
+  amount: number;
+  calendars_given: number;
+  payment_method: 'cheque' | 'carte';
+  donator_name: string;
+  donator_email?: string;
+  notes?: string;
+}
+
+interface FormData {
+  totalEspeces: string;
+  calendarsVendus: string;
+  donsAvecRecus: DonDetaille[];
+}
+
 interface ClotureModalProps {
-  tourneeActive: any;
+  tourneeActive: TourneeActive | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -31,7 +51,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
   const { isOnline, addPendingTransaction } = useOfflineStore();
   const [submitInProgress, setSubmitInProgress] = useState(false);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     totalEspeces: '',
     calendarsVendus: '',
     donsAvecRecus: []
@@ -56,6 +76,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
     setSubmitInProgress(true);
 
     try {
+  const tourneeId = String((tourneeActive as TourneeActive)?.tournee_id ?? '');
       if (isOnline) {
         const response = await fetch('/api/tours/complete-tour', {
           method: 'POST',
@@ -63,7 +84,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            tournee_id: tourneeActive.tournee_id,
+            tournee_id: tourneeId,
             user_id: user.id,
             team_id: profile.team_id,
             totalEspeces: parseFloat(formData.totalEspeces),
@@ -86,7 +107,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
         addPendingTransaction({
           user_id: user.id,
           team_id: profile.team_id,
-          tournee_id: tourneeActive.tournee_id,
+          tournee_id: tourneeId,
           amount: parseFloat(formData.totalEspeces),
           calendars_given: parseInt(formData.calendarsVendus),
           payment_method: 'especes',
@@ -99,7 +120,7 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
           addPendingTransaction({
             user_id: user.id,
             team_id: profile.team_id,
-            tournee_id: tourneeActive.tournee_id,
+            tournee_id: tourneeId,
             amount: don.amount,
             calendars_given: don.calendars_given,
             payment_method: don.payment_method,
@@ -113,15 +134,16 @@ export default function ClotureModal({ tourneeActive, onClose, onSuccess }: Clot
         onSuccess();
       }
 
-    } catch (error) {
-      console.error('Erreur clôture tournée:', error);
-      alert('Erreur lors de la clôture: ' + (error as Error).message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erreur clôture tournée:', message);
+      alert('Erreur lors de la clôture: ' + message);
     } finally {
       setSubmitInProgress(false);
     }
   };
 
-  const updateDonsAvecRecus = (dons: any[]) => {
+  const updateDonsAvecRecus = (dons: DonDetaille[]) => {
     setFormData({ ...formData, donsAvecRecus: dons });
   };
 

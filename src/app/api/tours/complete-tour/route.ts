@@ -21,6 +21,14 @@ interface CompleteTourRequest {
   donsDetailles: DonDetaille[];
 }
 
+type ReceiptResult = {
+  transactionId: string;
+  donatorEmail?: string;
+  success: boolean;
+  receiptNumber?: string;
+  error?: string;
+};
+
 export async function POST(request: NextRequest) {
   try {
     console.log('🏠 Clôture de tournée - début');
@@ -61,8 +69,8 @@ export async function POST(request: NextRequest) {
       donsDetaillesCount: donsDetailles.length
     });
 
-    const createdTransactions: string[] = [];
-    const receiptResults: any[] = [];
+  const createdTransactions: string[] = [];
+  const receiptResults: ReceiptResult[] = [];
 
     // 1. Créer la transaction pour les espèces si > 0
     if (totalEspeces > 0) {
@@ -160,13 +168,14 @@ export async function POST(request: NextRequest) {
               error: receiptResult.error
             });
           }
-        } catch (receiptError) {
-          console.error('❌ Erreur process reçu:', receiptError);
+        } catch (receiptError: unknown) {
+          const message = receiptError instanceof Error ? receiptError.message : String(receiptError);
+          console.error('❌ Erreur process reçu:', message);
           receiptResults.push({
             transactionId: detailTransaction.id,
             donatorEmail: don.donator_email,
             success: false,
-            error: 'Erreur technique envoi reçu'
+            error: message || 'Erreur technique envoi reçu'
           });
         }
       }
@@ -215,14 +224,15 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     });
 
-  } catch (error) {
-    console.error('❌ Erreur API complete-tour:', error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erreur API complete-tour:', message);
     
     return NextResponse.json({
       success: false,
       error: 'Erreur lors de la clôture de tournée',
       details: process.env.NODE_ENV === 'development' 
-        ? (error instanceof Error ? error.message : 'Unknown error') 
+        ? message
         : undefined,
       timestamp: new Date().toISOString()
     }, { status: 500 });
@@ -233,7 +243,7 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     // Test basique de connexion DB
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('transactions')
       .select('id')
       .limit(1);

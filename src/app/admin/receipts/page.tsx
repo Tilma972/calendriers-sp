@@ -61,12 +61,19 @@ export default function AdminReceiptsPage() {
       if (error) throw error;
       
       // Transformer les données pour avoir donator_name et amount au niveau principal
-      const transformedData = data?.map(log => ({
-        ...log,
-        donator_name: log.transactions?.donator_name,
-        amount: log.transactions?.amount
-      })) || [];
-      
+      const transformedData = (data || []).map((log: Record<string, unknown>) => {
+        const statusRaw = log['status'];
+        const allowed = ['sent', 'failed', 'pending'];
+        const status = (typeof statusRaw === 'string' && allowed.includes(statusRaw)) ? statusRaw : 'pending';
+        const transactions = log['transactions'] as Record<string, unknown> | undefined;
+          return {
+            ...(log as Record<string, unknown>),
+          donator_name: transactions?.['donator_name'] as string | undefined,
+          amount: transactions?.['amount'] as number | undefined,
+          status,
+        } as RecentReceipt;
+      }) as RecentReceipt[];
+
       setRecentReceipts(transformedData);
     } catch (error) {
       console.error('Erreur chargement logs:', error);
@@ -91,7 +98,18 @@ export default function AdminReceiptsPage() {
         .limit(10);
 
       if (error) throw error;
-      setSearchResults(data || []);
+      // Normalize nulls to empty strings for TransactionResult strict typing
+      const normalized = (data || []).map((t: unknown) => {
+        const tt = t as Record<string, unknown>;
+        return {
+          id: tt.id as string,
+          donator_email: (tt.donator_email as string) ?? '',
+          donator_name: (tt.donator_name as string) ?? '',
+          amount: tt.amount as number,
+          created_at: (tt.created_at as string) ?? '',
+        } as TransactionResult;
+      });
+      setSearchResults(normalized);
       
       if (!data || data.length === 0) {
         toast.error('Aucune transaction trouvée avec cet email ou nom');

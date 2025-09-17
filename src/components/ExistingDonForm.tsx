@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
-import { CreditCard, Banknote, Receipt, User, MessageSquare, X, Check } from 'lucide-react';
+import { CreditCard, Banknote, Receipt, MessageSquare, X, Check } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth';
 import { useOfflineStore } from '@/shared/stores/offline';
 import { supabase } from '@/shared/lib/supabase';
@@ -28,13 +28,23 @@ type QuickAmountButton = {
 type PaymentMethodOption = {
   id: 'especes' | 'cheque' | 'carte';
   label: string;
-  icon: any;
+  icon: React.ElementType;
   description: string;
   accentColor: string;
 };
 
+type Tournee = {
+  tournee_id: string;
+  team_name?: string;
+  team_color?: string;
+  calendars_initial?: number;
+  calendars_distributed?: number;
+  total_amount?: number;
+  total_transactions?: number;
+};
+
 interface ExistingDonFormProps {
-  tourneeActive: any;
+  tourneeActive: Tournee | null | undefined;
   onSuccess: () => void;
   onCancel: () => void;
   updateTourneeOptimistic: (data: { amount: number; calendars_given: number }) => void;
@@ -83,7 +93,7 @@ export default function ExistingDonForm({
       id: 'cheque',
       label: 'Chèque',
       icon: Receipt,
-      description: 'À l\'ordre des Sapeurs-Pompiers',
+      description: "À l'ordre des Sapeurs-Pompiers",
       accentColor: 'blue'
     },
     {
@@ -213,10 +223,11 @@ export default function ExistingDonForm({
               showSuccessToast(`Don enregistré ! Reçu envoyé à ${newDon.donator_email}`);
             } else {
               console.warn('⚠️ Erreur nouvelle API:', result.error);
-              showSuccessToast('Don enregistré ! (Erreur envoi email: ' + result.error + ')');
+              showSuccessToast('Don enregistré ! (Erreur envoi email: ' + String(result.error) + ')');
             }
-          } catch (err) {
-            console.error('❌ Erreur fetch:', err);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error('❌ Erreur fetch:', message);
             showSuccessToast('Don enregistré ! (Erreur technique)');
           }
         } else {
@@ -237,9 +248,10 @@ export default function ExistingDonForm({
         throw new Error('Mode offline');
       }
 
-    } catch (error) {
-      console.log('💾 Erreur attrapée, mode offline...');
-      // Mode offline : sauvegarder localement
+    } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.log('💾 Erreur attrapée, mode offline...', message);
+    // Mode offline : sauvegarder localement
       const offlineTransaction = {
         id: `offline_${Date.now()}`,
         user_id: user.id,
@@ -256,7 +268,7 @@ export default function ExistingDonForm({
         offline: true
       };
 
-      addPendingTransaction(offlineTransaction);
+  addPendingTransaction(offlineTransaction);
       
       // Mise à jour optimiste même en offline
       updateTourneeOptimistic({
@@ -264,7 +276,7 @@ export default function ExistingDonForm({
         calendars_given: newDon.calendars_given
       });
 
-      showSuccessToast('Don sauvegardé hors-ligne ! Sera synchronisé au retour du réseau.');
+  showSuccessToast('Don sauvegardé hors-ligne ! Sera synchronisé au retour du r&eacute;seau.');
     }
 
     // ✅ MAINTENANT seulement on ferme le formulaire
@@ -328,7 +340,7 @@ export default function ExistingDonForm({
           )}
         </div>
         <p className="text-gray-600 text-sm">
-          Enregistrement d'un don pour la campagne calendriers 2025
+          Enregistrement d&apos;un don pour la campagne calendriers 2025
         </p>
       </div>
 
@@ -614,7 +626,7 @@ export default function ExistingDonForm({
         {newDon.payment_method === 'carte' && !showQRCode && (
           <div className="text-center p-3 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-800">
-              Le QR code s'affichera automatiquement pour ce mode de paiement
+              Le QR code s&apos;affichera automatiquement pour ce mode de paiement
             </p>
           </div>
         )}

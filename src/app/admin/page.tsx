@@ -15,7 +15,7 @@ import {
   AdminStatCard
 } from '@/components/ui/admin';
 import { Button } from '@/components/ui/Button';
-import { adminClassNames, createStatusBadge } from '@/components/ui/admin/admin-theme';
+import { adminClassNames } from '@/components/ui/admin/admin-theme';
 import { 
   BarChart3, 
   Users, 
@@ -54,7 +54,7 @@ interface RecentActivity {
 }
 
 export default function AdminDashboardNew() {
-  const { profile } = useAuthStore();
+  useAuthStore();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,13 +83,9 @@ export default function AdminDashboardNew() {
           .from('transactions')
           .select('id')
           .eq('status', 'pending'),
-        supabase
-          .from('profiles')
-          .select('id')
-          .eq('is_active', false),
       ]);
 
-      const [usersData, teamsData, tourneesTodayData, transactionsTodayData, pendingData, pendingUsersData] = statsPromises;
+      const [usersData, teamsData, tourneesTodayData, transactionsTodayData, pendingData] = statsPromises;
 
       const users = usersData.data || [];
       const teams = teamsData.data || [];
@@ -126,15 +122,19 @@ export default function AdminDashboardNew() {
           id: t.id,
           type: 'transaction',
           description: `Nouveau don de ${t.amount}€`,
-          timestamp: t.created_at,
+          timestamp: String(t.created_at),
           user_name: 'Sapeur',
           amount: Number(t.amount),
         }));
         setRecentActivity(activities);
       }
 
-    } catch (error: any) {
-      console.error('Erreur chargement données admin:', error);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur chargement données admin:', error);
+      } else {
+        console.error('Erreur chargement données admin:', String(error));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -337,7 +337,7 @@ export default function AdminDashboardNew() {
                       {stats.teams_without_chef} équipe(s) sans chef
                     </div>
                     <div className="text-sm text-orange-600 mt-1">
-                      Assignez des chefs d'équipe pour optimiser la gestion des tournées
+                      Assignez des chefs d&apos;équipe pour optimiser la gestion des tournées
                     </div>
                   </div>
                   <Link
@@ -359,7 +359,7 @@ export default function AdminDashboardNew() {
                       Toutes les transactions sont validées
                     </div>
                     <div className="text-sm text-green-600 mt-1">
-                      Aucune action requise pour aujourd'hui
+                      Aucune action requise pour aujourd&apos;hui
                     </div>
                   </div>
                 </div>
@@ -372,10 +372,10 @@ export default function AdminDashboardNew() {
                   </div>
                   <div>
                     <div className="font-medium text-blue-800">
-                      Aucune activité aujourd'hui
+                      Aucune activité aujourd&apos;hui
                     </div>
                     <div className="text-sm text-blue-600 mt-1">
-                      Les statistiques s'afficheront avec les premières transactions
+                      Les statistiques s&apos;afficheront avec les premières transactions
                     </div>
                   </div>
                 </div>

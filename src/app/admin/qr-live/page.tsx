@@ -23,7 +23,9 @@ export default function QRLivePage() {
 
   const loadQRStats = async () => {
     try {
-      const { data, error } = await supabase.rpc('get_qr_live_stats');
+  // supabase rpc type list is narrow in our typings; cast to any for this call (conservative)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('get_qr_live_stats');
       
       if (error) {
         console.error('Error loading QR stats:', error);

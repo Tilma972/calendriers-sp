@@ -16,15 +16,14 @@ import {
   WifiOff,
   Play,
   CheckCircle,
-  Receipt,
-  Home
+  Receipt
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function CalendriersPage() {
   const router = useRouter();
   const { profile, user } = useAuthStore();
-  const { isOnline, addPendingTransaction } = useOfflineStore();
+  const { isOnline } = useOfflineStore();
   
   // Utilisation du hook personnalisé
   const {
@@ -57,7 +56,7 @@ export default function CalendriersPage() {
     
     if (!isOnline) {
       console.log('❌ Not online, showing alert');
-      alert('⚠️ Vous devez être connecté pour démarrer une nouvelle tournée.');
+  alert('⚠️ Vous devez être connecté pour démarrer une nouvelle tournée.');
       return;
     }
     
@@ -211,7 +210,7 @@ export default function CalendriersPage() {
                     Tournée en cours
                   </h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    Vue d'ensemble de votre progression
+                    Vue d&apos;ensemble de votre progression
                   </p>
                 </div>
 

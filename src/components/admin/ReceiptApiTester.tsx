@@ -29,7 +29,28 @@ export default function ReceiptApiTester() {
   const [testDonatorEmail, setTestDonatorEmail] = useState('');
   const [testDonatorName, setTestDonatorName] = useState('');
   const [quality, setQuality] = useState<'draft' | 'standard' | 'high'>('standard');
-  const [healthStatus, setHealthStatus] = useState<any>(null);
+  interface HealthChecks {
+    gotenbergConnection?: { success?: boolean; error?: string } | null;
+    storage?: { healthy?: boolean; error?: string } | null;
+    database?: boolean;
+    smtpConnection?: { success?: boolean; error?: string } | null;
+  }
+
+  interface HealthStatus {
+    status: 'healthy' | 'degraded' | 'error';
+    timestamp: string;
+    version?: string;
+    checks?: HealthChecks;
+    stats?: {
+      cache?: { size?: number; maxSize?: number; utilizationPercent?: number };
+      email24h?: Record<string, number>;
+      recentTransactions?: number;
+    };
+    configuration?: Record<string, unknown> | null;
+    endpoints?: Record<string, string>;
+  }
+
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [availableTransactions, setAvailableTransactions] = useState<Transaction[]>([]);
 
   // Charger quelques transactions pour les tests

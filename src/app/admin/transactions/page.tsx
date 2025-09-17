@@ -35,15 +35,15 @@ interface Transaction {
   user_id: string;
   team_id: string | null;
   tournee_id: string | null;
-  amount: number;
-  calendars_given: number;
-  payment_method: 'especes' | 'cheque' | 'carte' | 'virement';
+  amount: number | null;
+  calendars_given: number | null;
+  payment_method: 'especes' | 'cheque' | 'carte' | 'virement' | 'especes_batch' | 'carte_qr';
   donator_name: string | null;
   donator_email: string | null;
-  status: 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled';
+  status: 'pending' | 'validated_team' | 'validated_tresorier' | 'cancelled' | null;
   receipt_number: string | null;
   notes: string | null;
-  created_at: string;
+  created_at: string | null;
   validated_team_at: string | null;
   validated_tresorier_at: string | null;
   // Données jointes
@@ -93,15 +93,17 @@ function useAdminTransactions() {
       }
 
       // Logique de jointures manuelles (identique à l'original)
-      const userIds = [...new Set(transactionsData.map(t => t.user_id).filter(Boolean))];
-      const teamIds = [...new Set(transactionsData.map(t => t.team_id).filter(Boolean))];
+  const userIds = [...new Set(transactionsData.map(t => t.user_id).filter(Boolean))];
+  const teamIds = [...new Set(transactionsData.map(t => t.team_id))];
+  const userIdsFiltered = userIds.filter((id): id is string => !!id);
+  const teamIdsFiltered = teamIds.filter((id): id is string => !!id);
 
       const [profilesResult, teamsResult] = await Promise.all([
-        userIds.length > 0
-          ? supabase.from('profiles').select('id, full_name').in('id', userIds.filter(Boolean) as string[])
+        userIdsFiltered.length > 0
+          ? supabase.from('profiles').select('id, full_name').in('id', userIdsFiltered)
           : { data: [], error: null },
-        teamIds.length > 0
-          ? supabase.from('teams').select('id, name, color').in('id', teamIds)
+        teamIdsFiltered.length > 0
+          ? supabase.from('teams').select('id, name, color').in('id', teamIdsFiltered)
           : { data: [], error: null }
       ]);
 
@@ -125,7 +127,7 @@ function useAdminTransactions() {
         team_id: transaction.team_id,
         tournee_id: transaction.tournee_id,
         amount: transaction.amount,
-        calendars_given: transaction.calendars_given,
+        calendars_given: transaction.calendars_given || 0,
         payment_method: transaction.payment_method,
         donator_name: transaction.donator_name,
         donator_email: transaction.donator_email,
@@ -138,13 +140,18 @@ function useAdminTransactions() {
         user_name: profilesMap[transaction.user_id] || null,
         team_name: transaction.team_id ? teamsMap[transaction.team_id]?.name || null : null,
         team_color: transaction.team_id ? teamsMap[transaction.team_id]?.color || null : null,
-      }));
+  }));
 
       setTransactions(enrichedTransactions);
 
-    } catch (error: any) {
-      console.error('Erreur chargement transactions:', error);
-      toast.error(`Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur chargement transactions:', error);
+        toast.error(`Erreur: ${error.message}`);
+      } else {
+        console.error('Erreur chargement transactions:', String(error));
+        toast.error(`Erreur: ${String(error)}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -163,7 +170,7 @@ function useAdminTransactions() {
         t.id === transactionId
           ? {
             ...t,
-            status: newStatus as any,
+            status: newStatus as Transaction['status'],
             validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null
           }
           : t
@@ -173,7 +180,7 @@ function useAdminTransactions() {
     const actionText = action === 'validate' ? 'Validation' : 'Rejet';
     toast.loading(`${actionText} en cours...`, { id: `validate-${transactionId}` });
 
-    try {
+  try {
       const { error } = await supabase
         .from('transactions')
         .update({
@@ -188,7 +195,7 @@ function useAdminTransactions() {
       toast.success(`Transaction ${action === 'validate' ? 'validée' : 'rejetée'}`, { id: `validate-${transactionId}` });
       setSelectedTransactions(prev => prev.filter(id => id !== transactionId));
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback
       setTransactions(prev =>
         prev.map(t =>
@@ -196,8 +203,13 @@ function useAdminTransactions() {
         )
       );
 
-      console.error('Erreur validation:', error);
-      toast.error(`Erreur: ${error.message}`, { id: `validate-${transactionId}` });
+      if (error instanceof Error) {
+        console.error('Erreur validation:', error);
+        toast.error(`Erreur: ${error.message}`, { id: `validate-${transactionId}` });
+      } else {
+        console.error('Erreur validation:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: `validate-${transactionId}` });
+      }
     }
   };
 
@@ -214,7 +226,7 @@ function useAdminTransactions() {
         transactionIds.includes(t.id)
           ? {
             ...t,
-            status: newStatus as any,
+            status: newStatus as Transaction['status'],
             validated_tresorier_at: action === 'validate' ? new Date().toISOString() : null,
             notes: note ? `${t.notes || ''}${t.notes ? '\n' : ''}Admin: ${note}` : t.notes
           }
@@ -225,7 +237,7 @@ function useAdminTransactions() {
     const actionText = action === 'validate' ? 'Validation' : 'Rejet';
     toast.loading(`${actionText} de ${transactionIds.length} transactions...`, { id: 'validate-bulk' });
 
-    try {
+  try {
       const updatePromises = transactionIds.map(transactionId => {
         const originalTransaction = originalTransactions.find(t => t.id === transactionId);
         const updatedNotes = note ?
@@ -252,7 +264,7 @@ function useAdminTransactions() {
       toast.success(`${transactionIds.length} transactions ${action === 'validate' ? 'validées' : 'rejetées'}`, { id: 'validate-bulk' });
       setSelectedTransactions([]);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Rollback
       setTransactions(prev =>
         prev.map(t => {
@@ -260,9 +272,13 @@ function useAdminTransactions() {
           return original || t;
         })
       );
-
-      console.error('Erreur validation bulk:', error);
-      toast.error(`Erreur: ${error.message}`, { id: 'validate-bulk' });
+      if (error instanceof Error) {
+        console.error('Erreur validation bulk:', error);
+        toast.error(`Erreur: ${error.message}`, { id: 'validate-bulk' });
+      } else {
+        console.error('Erreur validation bulk:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: 'validate-bulk' });
+      }
     }
   };
 
@@ -298,14 +314,14 @@ export default function AdminTransactionsPageNew() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   // Filtrage (même logique que l'original)
   const filteredTransactions = transactions.filter(transaction => {
     const matchesStatus = statusFilter === 'all' || transaction.status === statusFilter;
     const matchesTeam = teamFilter === 'all' || transaction.team_id === teamFilter;
 
-    const transactionDate = new Date(transaction.created_at);
+  const transactionDate = new Date(transaction.created_at ?? '');
     const now = new Date();
     let matchesDate = true;
 
@@ -336,7 +352,7 @@ export default function AdminTransactionsPageNew() {
     validated_tresorier: transactions.filter(t => t.status === 'validated_tresorier').length,
     total_amount: transactions
       .filter(t => t.status === 'validated_tresorier')
-      .reduce((sum, t) => sum + t.amount, 0),
+      .reduce((sum, t) => sum + (t.amount ?? 0), 0),
   };
 
   // Équipes uniques pour les filtres
@@ -382,73 +398,83 @@ export default function AdminTransactionsPageNew() {
     {
       key: 'info',
       title: 'Transaction',
-      render: (value: any, row: Transaction) => (
-        <div>
-          <div className="text-sm font-medium text-gray-900">
-            {row.receipt_number || `#${row.id.slice(-8)}`}
-          </div>
-          <div className="text-sm text-gray-700">
-            {new Date(row.created_at).toLocaleDateString('fr-FR', {
-              day: '2-digit',
-              month: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </div>
-          {row.donator_name && (
-            <div className="text-xs text-gray-600">
-              {row.donator_name}
+  render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div>
+            <div className="text-sm font-medium text-gray-900">
+              {tx.receipt_number || `#${String(tx.id).slice(-8)}`}
             </div>
-          )}
-        </div>
-      )
+            <div className="text-sm text-gray-700">
+              {new Date(tx.created_at ?? '').toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </div>
+            {tx.donator_name && (
+              <div className="text-xs text-gray-600">
+                {tx.donator_name}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'team',
       title: 'Équipe/Sapeur',
-      render: (value: any, row: Transaction) => (
-        <div className="flex items-center gap-2">
-          {row.team_color && (
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: row.team_color }}
-            />
-          )}
-          <div>
-            <div className="text-sm font-medium text-gray-900">
-              {row.team_name || 'Aucune équipe'}
-            </div>
-            <div className="text-sm text-gray-700">
-              {row.user_name}
+  render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div className="flex items-center gap-2">
+            {tx.team_color && (
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: tx.team_color }}
+              />
+            )}
+            <div>
+              <div className="text-sm font-medium text-gray-900">
+                {tx.team_name || 'Aucune équipe'}
+              </div>
+              <div className="text-sm text-gray-700">
+                {tx.user_name}
+              </div>
             </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'amount',
       title: 'Montant',
-      render: (value: any, row: Transaction) => (
-        <div>
-          <div className="text-sm font-bold text-gray-900">
-            {row.amount.toFixed(2)}€
+      render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div>
+            <div className="text-sm font-bold text-gray-900">
+              {(tx.amount ?? 0).toFixed(2)}€
+            </div>
+            <div className="text-xs text-gray-600">
+              {tx.calendars_given} calendrier(s)
+            </div>
           </div>
-          <div className="text-xs text-gray-600">
-            {row.calendars_given} calendrier(s)
-          </div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'payment_method',
       title: 'Paiement',
-      render: (value: string) => {
-        const style = getPaymentStyle(value as keyof typeof adminTheme.colors.payment);
+      render: (_value: unknown) => {
+        const v = String(_value ?? '');
+        const style = getPaymentStyle(v as keyof typeof adminTheme.colors.payment);
         return (
           <span className={`px-2 py-1 text-xs rounded-full ${style.bg} ${style.text}`}>
-            {style.icon} {value === 'especes' ? 'Espèces' :
-              value === 'cheque' ? 'Chèque' :
-                value === 'carte' ? 'Carte' : 'Virement'}
+            {style.icon} {v === 'especes' ? 'Espèces' :
+              v === 'cheque' ? 'Chèque' :
+                v === 'carte' ? 'Carte' : 'Virement'}
           </span>
         );
       }
@@ -456,14 +482,14 @@ export default function AdminTransactionsPageNew() {
     {
       key: 'status',
       title: 'Statut',
-      render: (value: string) => {
-        const badge = createStatusBadge(value, {
+      render: (_value: unknown) => {
+        const v = String(_value ?? '');
+        const badge = createStatusBadge(v, {
           pending: 'En attente',
           validated_team: 'Valid. équipe',
           validated_tresorier: 'Validé final',
           cancelled: 'Annulé'
-        }[value] || value);
-        
+        }[v] || v);
         return (
           <span className={badge.className}>
             {badge.icon} {badge.text}
@@ -474,45 +500,48 @@ export default function AdminTransactionsPageNew() {
     {
       key: 'actions',
       title: 'Actions',
-      render: (value: any, row: Transaction) => (
-        <div className="flex gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowDetailModal(row.id);
-            }}
-            className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Voir détails"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+      render: (_value: unknown, row: Record<string, unknown>) => {
+        const tx = row as unknown as Transaction;
+        return (
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDetailModal(tx.id);
+              }}
+              className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Voir détails"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
 
-          {(row.status === 'pending' || row.status === 'validated_team') && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  validateTransaction(row.id, 'validate');
-                }}
-                className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-colors"
-                title="Valider"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  validateTransaction(row.id, 'reject');
-                }}
-                className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
-                title="Rejeter"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
-      )
+            {(tx.status === 'pending' || tx.status === 'validated_team') && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    validateTransaction(tx.id, 'validate');
+                  }}
+                  className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-lg transition-colors"
+                  title="Valider"
+                >
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    validateTransaction(tx.id, 'reject');
+                  }}
+                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors"
+                  title="Rejeter"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      }
     }
   ];
 
@@ -640,7 +669,7 @@ export default function AdminTransactionsPageNew() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
               >
                 <option value="all">Toutes les dates</option>
-                <option value="today">Aujourd'hui</option>
+                <option value="today">Aujourd&apos;hui</option>
                 <option value="week">7 derniers jours</option>
                 <option value="month">30 derniers jours</option>
               </select>
@@ -666,12 +695,12 @@ export default function AdminTransactionsPageNew() {
         <AdminSection>
           <AdminTable
             columns={tableColumns}
-            data={filteredTransactions}
+            data={filteredTransactions as unknown as Record<string, unknown>[]}
             isLoading={isLoading}
             selectedRows={selectedTransactions}
             onSelectRow={handleSelectRow}
             onSelectAll={handleSelectAll}
-            onRowClick={(row) => setShowDetailModal(row.id)}
+            onRowClick={(row: Record<string, unknown>) => setShowDetailModal(String(row['id'] ?? null))}
             emptyMessage="Aucune transaction trouvée avec ces critères"
             emptyIcon={<CreditCard className="w-16 h-16" />}
             rowKey="id"
@@ -711,11 +740,11 @@ export default function AdminTransactionsPageNew() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <span className="text-sm text-gray-500">Montant</span>
-                  <div className="text-2xl font-bold text-gray-900">{transaction.amount.toFixed(2)}€</div>
+                  <div className="text-2xl font-bold text-gray-900">{(transaction.amount ?? 0).toFixed(2)}€</div>
                 </div>
                 <div>
                   <span className="text-sm text-gray-500">Calendriers</span>
-                  <div className="text-2xl font-bold text-gray-900">{transaction.calendars_given}</div>
+                  <div className="text-2xl font-bold text-gray-900">{transaction.calendars_given ?? 0}</div>
                 </div>
               </div>
 
@@ -760,7 +789,7 @@ export default function AdminTransactionsPageNew() {
                 <div>
                   <span className="text-sm text-gray-500">Date de création</span>
                   <div className="font-medium">
-                    {new Date(transaction.created_at).toLocaleString('fr-FR')}
+                    {new Date(transaction.created_at ?? '').toLocaleString('fr-FR')}
                   </div>
                 </div>
 

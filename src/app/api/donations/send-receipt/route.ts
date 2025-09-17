@@ -38,7 +38,7 @@ interface EmailSettings {
 }
 
 // Cache pour idempotence (en production, utiliser Redis ou DB)
-const processedRequests = new Map<string, { timestamp: number; result: any }>();
+const processedRequests = new Map<string, { timestamp: number; result: unknown }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 interface SendReceiptRequest {
@@ -80,18 +80,19 @@ export async function POST(request: NextRequest) {
 
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       console.log(`⚡ Requête idempotente détectée pour ${transactionId}`);
+      const cachedResult = (cached.result ?? {}) as Record<string, unknown>;
       return NextResponse.json({
-        ...cached.result,
+        ...cachedResult,
         fromCache: true,
         cachedAt: new Date(cached.timestamp).toISOString()
       });
     }
 
     // 1. Récupérer la transaction 
-    const { data: transactions, error: fetchError } = await supabase
-      .rpc('get_transaction_for_receipt' as any, {
-        transaction_id: transactionId
-      }) as { data: TransactionForReceipt[] | null, error: any };
+    const rpcRes = await supabase.rpc('get_transaction_for_receipt', {
+      transaction_id: transactionId
+    });
+    const { data: transactions, error: fetchError } = rpcRes as { data: TransactionForReceipt[] | null; error: unknown };
 
     if (fetchError || !transactions || transactions.length === 0) {
       console.error('❌ Transaction non trouvée:', fetchError);
@@ -294,11 +295,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 12. Mettre à jour la transaction avec succès
-    await supabase
-      .rpc('update_receipt_number' as any, {
-        transaction_id: transactionId,
-        receipt_num: receiptNumber
-      });
+    await supabase.rpc('update_receipt_number', {
+      transaction_id: transactionId,
+      receipt_num: receiptNumber
+    });
 
     await supabase
       .from('transactions')
@@ -380,7 +380,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Route de test et monitoring
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     console.log('🏥 Health check API send-receipt...');
 
@@ -557,13 +557,14 @@ async function convertHtmlToPdf(htmlContent: string, receiptNumber: string): Pro
     }
 
     const pdfBuffer = Buffer.from(await response.arrayBuffer());
-    console.log(`✅ PDF généré: ${pdfBuffer.length} bytes`);
+  console.log(`✅ PDF généré: ${pdfBuffer.length} bytes for ${receiptNumber}`);
 
     return { success: true, pdfBuffer };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Erreur conversion PDF:', error);
-    return { success: false, error: error.message };
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
   }
 }
 
@@ -605,7 +606,7 @@ async function sendEmailWithPdf({
         user: smtpConfig.smtp_user,
         pass: smtpConfig.smtp_password
       }
-    } as any);
+    } as unknown as nodemailer.TransportOptions);
 
     console.log('📧 Transporteur créé, test de connection...');
 
@@ -646,12 +647,12 @@ async function sendEmailWithPdf({
 
     return { success: true };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌❌❌ ERREUR ENVOI EMAIL ❌❌❌');
-    console.error('📧 Error message:', error.message);
-    console.error('📧 Error stack:', error.stack);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('📧 Error message:', message);
     console.error('📧 Full error:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: message };
   }
 }
 
@@ -676,8 +677,9 @@ async function testGotenbergConnection(): Promise<{ success: boolean; error?: st
     }
 
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
   }
 }
 
@@ -701,12 +703,13 @@ async function testSmtpConnection(): Promise<{ success: boolean; error?: string 
         user: smtpConfig.smtp_user,
         pass: smtpConfig.smtp_password
       }
-    });
+    } as unknown as nodemailer.TransportOptions);
 
     await transporter.verify();
     return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { success: false, error: message };
   }
 }
 

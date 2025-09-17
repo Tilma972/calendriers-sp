@@ -44,10 +44,10 @@ interface HealthCheckResponse {
   version?: string;
   environment?: string;
   checks: {
-    gotenbergConnection: any;
-    storage: any;
+    gotenbergConnection: { success?: boolean; error?: string } | null;
+    storage: { healthy?: boolean; error?: string } | null;
     database: boolean;
-    smtpConnection: any;
+    smtpConnection: { success?: boolean; error?: string } | null;
   };
   stats: {
     cache: {
@@ -58,7 +58,7 @@ interface HealthCheckResponse {
     email24h: Record<string, number>;
     recentTransactions: number;
   };
-  configuration: any;
+  configuration: Record<string, unknown> | null;
   endpoints: Record<string, string>;
 }
 
@@ -99,13 +99,14 @@ export const useSendReceipt = () => {
       setLastResult(result);
       return result;
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const details = error instanceof Error ? error.message : String(error);
       const errorResult: SendReceiptResponse = {
         success: false,
         error: 'Erreur réseau',
-        details: error.message
+        details
       };
-      
+
       setLastResult(errorResult);
       return errorResult;
     } finally {
@@ -159,7 +160,8 @@ export const useSendReceipt = () => {
       const result = await response.json();
       return result;
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Health check error:', error);
       return {
         status: 'error',
         timestamp: new Date().toISOString(),
@@ -199,10 +201,11 @@ export const useSendReceipt = () => {
 
       return await response.json();
       
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: error.message
+        error: message
       };
     }
   }, []);

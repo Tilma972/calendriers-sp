@@ -1,4 +1,5 @@
 // supabase/functions/track-email-open/index.ts - Tracking ouverture emails
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
@@ -110,9 +111,11 @@ serve(async (req) => {
       }
     )
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Erreur tracking:', error)
-    
+    const message = error instanceof Error ? error.message : String(error)
+    console.error('❌ Tracking error message:', message)
+
     // Retourner pixel transparent même en cas d'erreur
     return new Response(
       new Uint8Array([

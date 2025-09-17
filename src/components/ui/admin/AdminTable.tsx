@@ -2,17 +2,17 @@
 import React from 'react';
 import { cn } from '@/shared/lib/utils';
 
-export interface Column<T = any> {
+export interface Column<T = unknown> {
   key: string;
   title: string;
   width?: string;
   align?: 'left' | 'center' | 'right';
   sortable?: boolean;
-  render?: (value: any, row: T, index: number) => React.ReactNode;
+  render?: (value: unknown, row: T, index: number) => React.ReactNode;
   className?: string;
 }
 
-export interface AdminTableProps<T = any> {
+export interface AdminTableProps<T = unknown> {
   columns: Column<T>[];
   data: T[];
   isLoading?: boolean;
@@ -37,7 +37,7 @@ export interface AdminTableFiltersProps {
   className?: string;
 }
 
-const AdminTable = <T extends Record<string, any>>({
+const AdminTable = <T extends Record<string, unknown>>({
   columns,
   data,
   isLoading = false,
@@ -56,7 +56,8 @@ const AdminTable = <T extends Record<string, any>>({
     if (typeof rowKey === 'function') {
       return rowKey(row);
     }
-    return row[rowKey] || index.toString();
+    const val = (row as unknown as Record<string, unknown>)[rowKey as string];
+    return (typeof val === 'string' ? val : index.toString());
   };
 
   const isAllSelected = data.length > 0 && selectedRows.length === data.length;
@@ -180,9 +181,9 @@ const AdminTable = <T extends Record<string, any>>({
                   )}
                   
                   {columns.map((column) => {
-                    const value = row[column.key];
+                const value = (row as unknown as Record<string, unknown>)[column.key as string];
                     const cellContent = column.render 
-                      ? column.render(value, row, index)
+                            ? column.render(value, row, index)
                       : value;
                     
                     return (
@@ -195,8 +196,8 @@ const AdminTable = <T extends Record<string, any>>({
                           column.className
                         )}
                       >
-                        {cellContent}
-                      </td>
+                          {typeof cellContent === 'string' || typeof cellContent === 'number' ? cellContent : cellContent as React.ReactNode}
+                        </td>
                     );
                   })}
                 </tr>

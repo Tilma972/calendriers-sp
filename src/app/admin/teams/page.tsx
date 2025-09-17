@@ -13,7 +13,6 @@ import {
   AdminGrid,
   AdminStatCard,
   AdminCard,
-  AdminModal,
   AdminFormModal,
   AdminConfirmModal
 } from '@/components/ui/admin';
@@ -25,7 +24,6 @@ import {
   UserCheck, 
   AlertTriangle,
   Edit,
-  Eye,
   Trash2,
   Plus
 } from 'lucide-react';
@@ -120,10 +118,21 @@ export default function AdminTeamsPageNew() {
         usersData.map(u => [u.id, u.full_name || u.email])
       );
 
-      const teamsWithChefs = teamsData.map(team => ({
-        ...team,
-        chef_name: team.chef_id ? chefsMap.get(team.chef_id) || null : null
-      }));
+      const teamsWithChefs = (teamsData as Record<string, unknown>[]).map(team => {
+        const chefId = team['chef_id'] as string | null | undefined;
+        return {
+          id: String(team['id'] ?? ''),
+          name: String(team['name'] ?? ''),
+          color: (team['color'] as string) ?? TEAM_COLORS[0],
+          chef_id: chefId ?? null,
+          chef_name: chefId ? (chefsMap.get(chefId) as string) || null : null,
+          calendars_target: Number(team['calendars_target'] ?? 0),
+          created_at: String(team['created_at'] ?? ''),
+          nb_members: Number(team['nb_members'] ?? 0),
+          total_collecte: Number(team['total_collecte'] ?? 0),
+          total_calendriers_distribues: Number(team['total_calendriers_distribues'] ?? 0),
+        } as Team;
+      });
 
       setTeams(teamsWithChefs);
       setUsers(usersData);
@@ -362,7 +371,7 @@ export default function AdminTeamsPageNew() {
                         className="w-4 h-4 rounded-full border border-gray-200"
                         style={{ backgroundColor: team.color }}
                       />
-                      <span className="text-sm text-gray-600">Couleur d'équipe</span>
+                      <span className="text-sm text-gray-600">Couleur d&apos;équipe</span>
                     </div>
                     
                     <div className="flex items-center justify-between text-sm">
@@ -430,6 +439,12 @@ export default function AdminTeamsPageNew() {
             setShowEditModal(null);
             resetForm();
           }}
+          onCancel={() => {
+            // Conservative: mirror onClose behavior for cancel action
+            setShowCreateModal(false);
+            setShowEditModal(null);
+            resetForm();
+          }}
           onSubmit={showEditModal ? handleEditTeam : handleCreateTeam}
           title={showEditModal ? 'Modifier l\'équipe' : 'Créer une nouvelle équipe'}
           submitText={showEditModal ? 'Modifier' : 'Créer'}
@@ -438,7 +453,7 @@ export default function AdminTeamsPageNew() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Nom de l'équipe *
+                Nom de l&apos;équipe *
               </label>
               <Input
                 type="text"
@@ -451,7 +466,7 @@ export default function AdminTeamsPageNew() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Chef d'équipe (optionnel)
+                Chef d&apos;équipe (optionnel)
               </label>
               <select
                 value={formData.chef_id}
@@ -484,7 +499,7 @@ export default function AdminTeamsPageNew() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Couleur d'équipe
+                Couleur d&apos;équipe
               </label>
               <div className="flex flex-wrap gap-2">
                 {TEAM_COLORS.map((color) => (
@@ -520,7 +535,7 @@ export default function AdminTeamsPageNew() {
               type="danger"
               confirmText="Supprimer"
               cancelText="Annuler"
-              isSubmitting={isSubmitting}
+              isLoading={isSubmitting}
             />
           );
         })()}

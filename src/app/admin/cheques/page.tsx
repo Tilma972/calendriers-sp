@@ -1,7 +1,7 @@
 // src/app/admin/cheques/page.tsx - Gestion spécifique des chèques
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { AdminGuard } from '@/shared/components/AdminGuard';
 import { supabase } from '@/shared/lib/supabase';
 import { toast } from 'react-hot-toast';
@@ -27,7 +27,7 @@ function useAdminCheques() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCheques, setSelectedCheques] = useState<string[]>([]);
 
-  const loadCheques = async () => {
+  const loadCheques = useCallback(async () => {
     try {
       setIsLoading(true);
 
@@ -61,21 +61,42 @@ function useAdminCheques() {
       }
 
       if (data && Array.isArray(data)) {
-        const formattedCheques: ChequeTransaction[] = data.map((t: any) => ({
-          id: t.id,
-          amount: t.amount,
-          calendars_given: t.calendars_given,
-          donator_name: t.donator_name,
-          user_name: t.profiles?.full_name || null,
-          team_name: t.teams?.name || null,
-          cheque_numero: t.cheque_numero,
-          cheque_banque: t.cheque_banque,
-          cheque_tireur: t.cheque_tireur,
-          cheque_date_emission: t.cheque_date_emission,
-          cheque_deposited_at: t.cheque_deposited_at,
-          created_at: t.created_at,
-          status: t.status,
-        }));
+        const rows = data as unknown as Record<string, unknown>[];
+        const formattedCheques: ChequeTransaction[] = rows.map((row) => {
+          const profiles = row['profiles'] as Record<string, unknown> | undefined;
+          const teams = row['teams'] as Record<string, unknown> | undefined;
+
+          const id = String(row['id'] ?? '');
+          const amount = Number(row['amount'] ?? 0);
+          const calendars_given = Number(row['calendars_given'] ?? 0);
+          const donator_name = typeof row['donator_name'] === 'string' ? (row['donator_name'] as string) : null;
+          const user_name = typeof profiles?.['full_name'] === 'string' ? (profiles!['full_name'] as string) : null;
+          const team_name = typeof teams?.['name'] === 'string' ? (teams!['name'] as string) : null;
+          const cheque_numero = String(row['cheque_numero'] ?? '');
+          const cheque_banque = String(row['cheque_banque'] ?? '');
+          const cheque_tireur = typeof row['cheque_tireur'] === 'string' ? (row['cheque_tireur'] as string) : null;
+          const cheque_date_emission = typeof row['cheque_date_emission'] === 'string' ? (row['cheque_date_emission'] as string) : null;
+          const cheque_deposited_at = typeof row['cheque_deposited_at'] === 'string' ? (row['cheque_deposited_at'] as string) : null;
+          const created_at = String(row['created_at'] ?? '');
+          const status = String(row['status'] ?? '');
+
+          return {
+            id,
+            amount,
+            calendars_given,
+            donator_name,
+            user_name,
+            team_name,
+            cheque_numero,
+            cheque_banque,
+            cheque_tireur,
+            cheque_date_emission,
+            cheque_deposited_at,
+            created_at,
+            status,
+          };
+        });
+
         setCheques(formattedCheques);
       }
 
@@ -89,7 +110,7 @@ function useAdminCheques() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const markAsDeposited = async (chequeIds: string[]) => {
     try {
@@ -97,7 +118,7 @@ function useAdminCheques() {
 
       const { error } = await supabase
         .from('transactions')
-        .update({ cheque_deposited_at: new Date().toISOString() } as any)
+        .update({ cheque_deposited_at: new Date().toISOString() })
         .in('id', chequeIds);
 
       if (error) throw error;
@@ -154,13 +175,14 @@ function downloadCSV(data: Record<string, string | number | null>[], filename: s
   const headers = Object.keys(data[0]);
   const csvContent = [
     headers.join(';'), // Point-virgule pour Excel français
-    ...data.map(row => 
+    ...data.map(row =>
       headers.map(header => {
-        const cell = row[header];
-        if (typeof cell === 'string' && (cell.includes(';') || cell.includes('"'))) {
-          return `"${cell.replace(/"/g, '""')}"`;
+        const raw = row[header];
+        const cellStr = raw == null ? '' : String(raw);
+        if (cellStr.includes(';') || cellStr.includes('"')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
         }
-        return cell;
+        return cellStr;
       }).join(';')
     )
   ].join('\n');
@@ -191,7 +213,7 @@ export default function AdminChequesPage() {
 
   useEffect(() => {
     loadCheques();
-  }, []);
+  }, [loadCheques]);
 
   const filteredCheques = cheques.filter(cheque => {
     if (filterStatus === 'pending') return !cheque.cheque_deposited_at;

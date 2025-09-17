@@ -11,7 +11,7 @@ interface PendingUser {
   full_name: string | null;
   email: string;
   role: string;
-  created_at: string;
+  created_at: string | null;
   team_id: string | null;
 }
 
@@ -32,16 +32,21 @@ export default function AdminPendingUsersPage() {
       if (error) throw error;
 
       setPendingUsers(data || []);
-    } catch (error: any) {
-      console.error('Erreur chargement utilisateurs en attente:', error);
-      toast.error(`Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur chargement utilisateurs en attente:', error);
+        toast.error(`Erreur: ${error.message}`);
+      } else {
+        console.error('Erreur chargement utilisateurs en attente:', String(error));
+        toast.error(`Erreur: ${String(error)}`);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const approveUser = async (userId: string, userName: string) => {
-    if (!confirm(`Approuver l'utilisateur "${userName}" ?`)) return;
+  if (!confirm(`Approuver l\'utilisateur "${userName}" ?`)) return;
 
     const loadingToast = toast.loading('Approbation en cours...');
 
@@ -58,14 +63,19 @@ export default function AdminPendingUsersPage() {
       // Retirer de la liste
       setPendingUsers(prev => prev.filter(user => user.id !== userId));
 
-    } catch (error: any) {
-      console.error('Erreur approbation:', error);
-      toast.error(`Erreur: ${error.message}`, { id: loadingToast });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur approbation:', error);
+        toast.error(`Erreur: ${error.message}`, { id: loadingToast });
+      } else {
+        console.error('Erreur approbation:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: loadingToast });
+      }
     }
   };
 
   const rejectUser = async (userId: string, userName: string) => {
-    if (!confirm(`Rejeter l'utilisateur "${userName}" ? Cette action supprimera définitivement son compte.`)) return;
+  if (!confirm(`Rejeter l\'utilisateur "${userName}" ? Cette action supprimera définitivement son compte.`)) return;
 
     const loadingToast = toast.loading('Rejet en cours...');
 
@@ -86,9 +96,14 @@ export default function AdminPendingUsersPage() {
       // Retirer de la liste
       setPendingUsers(prev => prev.filter(user => user.id !== userId));
 
-    } catch (error: any) {
-      console.error('Erreur rejet:', error);
-      toast.error(`Erreur: ${error.message}`, { id: loadingToast });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error('Erreur rejet:', error);
+        toast.error(`Erreur: ${error.message}`, { id: loadingToast });
+      } else {
+        console.error('Erreur rejet:', String(error));
+        toast.error(`Erreur: ${String(error)}`, { id: loadingToast });
+      }
     }
   };
 
@@ -120,7 +135,7 @@ export default function AdminPendingUsersPage() {
                 <a href="/admin" className="text-gray-500 hover:text-gray-700">← Dashboard</a>
                 <div className="text-2xl">⏳</div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  Demandes d'inscription ({pendingUsers.length})
+                  Demandes d&apos;inscription ({pendingUsers.length})
                 </h1>
               </div>
               
@@ -140,11 +155,11 @@ export default function AdminPendingUsersPage() {
             /* État vide */
             <div className="bg-white rounded-lg shadow text-center py-12">
               <div className="text-6xl mb-4">✅</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
                 Aucune demande en attente
               </h3>
               <p className="text-gray-600">
-                Toutes les demandes d'inscription ont été traitées.
+                Toutes les demandes d&apos;inscription ont été traitées.
               </p>
             </div>
           ) : (
@@ -178,7 +193,7 @@ export default function AdminPendingUsersPage() {
                         <div>
                           <span className="font-medium text-gray-700">Inscription :</span>
                           <span className="ml-2">
-                            {new Date(user.created_at).toLocaleDateString('fr-FR')}
+                            {user.created_at ? new Date(String(user.created_at)).toLocaleDateString('fr-FR') : '—'}
                           </span>
                         </div>
                       </div>

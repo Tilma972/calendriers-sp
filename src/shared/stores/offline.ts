@@ -136,9 +136,10 @@ export const useOfflineStore = create<OfflineState>()(
               get().clearSyncedTransaction(transaction.id);
             }
 
-          } catch (error: any) {
+          } catch (error: unknown) {
             console.error(`💥 Erreur réseau sync ${transaction.id}:`, error);
-            get().incrementSyncAttempts(transaction.id, error.message);
+            const message = error instanceof Error ? error.message : String(error);
+            get().incrementSyncAttempts(transaction.id, message);
           }
 
           // Petit délai entre les syncs pour éviter de surcharger

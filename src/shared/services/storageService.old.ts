@@ -23,6 +23,18 @@ export interface EmailLogStats {
   dateSent: string;
 }
 
+// Small helpers for conservative runtime-safe conversions
+interface StorageBucket { name?: string }
+interface LogRow { id?: string }
+const asNumber = (v: unknown): number => {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+};
+
 export class ReceiptStorageService {
   private static readonly BUCKET_NAME = 'receipts';
   private static readonly PDF_FOLDER = 'pdf-receipts';
@@ -33,8 +45,9 @@ export class ReceiptStorageService {
   static async initializeBucket(): Promise<void> {
     try {
       // Vérifier si le bucket existe
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const bucketExists = buckets?.some(bucket => bucket.name === this.BUCKET_NAME);
+  const bucketsResp = await supabase.storage.listBuckets();
+  const buckets = (bucketsResp?.data ?? []) as StorageBucket[];
+  const bucketExists = buckets.some((bucket) => bucket?.name === this.BUCKET_NAME);
       
       if (!bucketExists) {
         // Créer le bucket
@@ -70,7 +83,7 @@ export class ReceiptStorageService {
       const filePath = `${this.PDF_FOLDER}/${year}/${month}/${fileName}`;
       
       // Upload le fichier
-      const { data, error } = await supabase.storage
+      const uploadResp = await supabase.storage
         .from(this.BUCKET_NAME)
         .upload(filePath, pdfBuffer, {
           contentType: 'application/pdf',
@@ -82,30 +95,33 @@ export class ReceiptStorageService {
           }
         });
       
-      if (error) {
-        throw new Error(`Erreur upload PDF: ${error.message}`);
+      if (uploadResp.error) {
+        throw new Error(`Erreur upload PDF: ${uploadResp.error?.message ?? String(uploadResp.error)}`);
       }
       
       // Générer URL signée pour accès sécurisé (expire dans 1 an)
-      const { data: { signedUrl }, error: urlError } = await supabase.storage
+      const signedResp = await supabase.storage
         .from(this.BUCKET_NAME)
         .createSignedUrl(filePath, 365 * 24 * 60 * 60); // 1 an
-      
-      if (urlError) {
-        console.warn('Erreur génération URL signée:', urlError);
+
+      if (signedResp.error) {
+        console.warn('Erreur génération URL signée:', signedResp.error);
         // Fallback: URL publique (si bucket public)
-        const { data: { publicUrl } } = supabase.storage
+        const publicResp = await supabase.storage
           .from(this.BUCKET_NAME)
           .getPublicUrl(filePath);
+        const publicUrl = publicResp?.data?.publicUrl ?? '';
         return publicUrl;
       }
-      
+
+  const signedUrl = signedResp?.data?.signedUrl ?? '';
       console.log(`✅ PDF uploadé: ${fileName}`);
-      return signedUrl || '';
+      return signedUrl;
       
-    } catch (error: any) {
-      console.error('Erreur upload PDF:', error);
-      throw new Error(`Échec upload PDF: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erreur upload PDF:', message);
+      throw new Error(`Échec upload PDF: ${message}`);
     }
   }
 
@@ -121,7 +137,7 @@ export class ReceiptStorageService {
       const month = String(new Date().getMonth() + 1).padStart(2, '0');
       const filePath = `html-receipts/${year}/${month}/${fileName}`;
       
-      const { data, error } = await supabase.storage
+      const uploadResp = await supabase.storage
         .from(this.BUCKET_NAME)
         .upload(filePath, htmlContent, {
           contentType: 'text/html; charset=utf-8',
@@ -133,19 +149,21 @@ export class ReceiptStorageService {
           }
         });
       
-      if (error) {
-        throw new Error(`Erreur upload HTML: ${error.message}`);
+      if (uploadResp.error) {
+        throw new Error(`Erreur upload HTML: ${uploadResp.error?.message ?? String(uploadResp.error)}`);
       }
       
-      const { data: { signedUrl } } = await supabase.storage
+      const signedResp = await supabase.storage
         .from(this.BUCKET_NAME)
         .createSignedUrl(filePath, 365 * 24 * 60 * 60);
-      
+
+  const signedUrl = signedResp?.data?.signedUrl ?? '';
       console.log(`✅ HTML archivé: ${fileName}`);
-      return signedUrl || '';
+      return signedUrl;
       
-    } catch (error: any) {
-      console.error('Erreur upload HTML:', error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erreur upload HTML:', message);
       // Non critique, ne pas faire échouer le processus
       return '';
     }
@@ -165,19 +183,20 @@ export class ReceiptStorageService {
         `html-receipts/${year}/${month}/${receiptNumber}.html`
       ];
       
-      const { error } = await supabase.storage
+      const removeResp = await supabase.storage
         .from(this.BUCKET_NAME)
         .remove(files);
       
-      if (error) {
-        return { success: false, error: error.message };
+      if (removeResp.error) {
+        return { success: false, error: removeResp.error?.message ?? String(removeResp.error) };
       }
       
       console.log(`✅ Reçu supprimé: ${receiptNumber}`);
       return { success: true };
       
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: message };
     }
   }
 }
@@ -215,9 +234,10 @@ export class EmailLogService {
       
       return { success: true, id: result?.id };
       
-    } catch (error: any) {
-      console.error('Erreur email log:', error);
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Erreur email log:', message);
+      return { success: false, error: message };
     }
   }
 
@@ -233,7 +253,7 @@ export class EmailLogService {
     }
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const updateData: any = {};
+  const updateData: Record<string, unknown> = {};
       
       if (updates.status) updateData.status = updates.status;
       if (updates.errorMessage) updateData.error_message = updates.errorMessage;
@@ -262,15 +282,16 @@ export class EmailLogService {
       
       return { success: true };
       
-    } catch (error: any) {
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: message };
     }
   }
 
   /**
    * Récupère les logs d'email pour une transaction
    */
-  static async getEmailLogsForTransaction(transactionId: string): Promise<any[]> {
+  static async getEmailLogsForTransaction(transactionId: string): Promise<unknown[]> {
     try {
       const { data, error } = await supabase
         .from('email_logs')
@@ -283,10 +304,10 @@ export class EmailLogService {
         return [];
       }
       
-      return data || [];
+      return Array.isArray(data) ? data : [];
       
-    } catch (error) {
-      console.error('Erreur logs transaction:', error);
+    } catch (error: unknown) {
+      console.error('Erreur logs transaction:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }
@@ -296,21 +317,31 @@ export class EmailLogService {
    */
   static async getEmailStats(days: number = 30): Promise<EmailLogStats[]> {
     try {
-      const { data, error } = await supabase
+      const statsResp = await supabase
         .from('email_stats')
         .select('*')
         .gte('date_sent', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
         .order('date_sent', { ascending: false });
-      
-      if (error) {
-        console.error('Erreur récupération stats:', error);
+
+      if (statsResp.error) {
+        console.error('Erreur récupération stats:', statsResp.error);
         return [];
       }
+
+      const rows = Array.isArray(statsResp.data) ? statsResp.data : [];
+      return rows.map((r: Record<string, unknown>) => ({
+        totalSent: asNumber(r.total_sent),
+        successfulSent: asNumber(r.successful_sent),
+        failedSent: asNumber(r.failed_sent),
+        bouncedSent: asNumber(r.bounced_sent),
+        openedCount: asNumber(r.opened_count),
+        clickedCount: asNumber(r.clicked_count),
+        openRatePercent: asNumber(r.open_rate_percent),
+        dateSent: (r.date_sent as string) ?? ''
+      } as EmailLogStats));
       
-      return data || [];
-      
-    } catch (error) {
-      console.error('Erreur stats email:', error);
+    } catch (error: unknown) {
+      console.error('Erreur stats email:', error instanceof Error ? error.message : String(error));
       return [];
     }
   }
@@ -318,18 +349,19 @@ export class EmailLogService {
   /**
    * Marque un email comme ouvert (pour tracking)
    */
-  static async trackEmailOpen(receiptNumber: string, userAgent?: string): Promise<void> {
+  static async trackEmailOpen(receiptNumber: string): Promise<void> {
     try {
       // Trouver le log correspondant
-      const { data: logs } = await supabase
+      const logsResp = await supabase
         .from('email_logs')
         .select('id')
         .eq('receipt_number', receiptNumber)
         .eq('status', 'sent')
         .limit(1);
-      
-      if (logs && logs.length > 0) {
-        await this.updateEmailLog(logs[0].id, {
+      const logs = (Array.isArray(logsResp?.data) ? logsResp.data : []) as LogRow[];
+
+      if (logs.length > 0) {
+        await this.updateEmailLog(logs[0].id ?? '', {
           status: 'opened',
           openedAt: new Date().toISOString()
         });
@@ -337,8 +369,8 @@ export class EmailLogService {
         console.log(`📧 Email ouvert tracké: ${receiptNumber}`);
       }
       
-    } catch (error) {
-      console.error('Erreur tracking ouverture:', error);
+    } catch (error: unknown) {
+      console.error('Erreur tracking ouverture:', error instanceof Error ? error.message : String(error));
       // Non critique, ne pas faire échouer
     }
   }
@@ -376,17 +408,18 @@ export class EmailLogService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
       
-      const { data, error } = await supabase
+      const delResp = await supabase
         .from('email_logs')
         .delete()
         .lt('created_at', cutoffDate.toISOString());
-      
-      if (error) {
-        console.error('Erreur nettoyage logs:', error);
+
+      if (delResp.error) {
+        console.error('Erreur nettoyage logs:', delResp.error);
         return 0;
       }
-      
-      const deletedCount = Array.isArray(data) ? data.length : 0;
+
+  const delData = Array.isArray(delResp?.data) ? (delResp.data as unknown[]) : [];
+  const deletedCount = delData.length;
       console.log(`🧹 ${deletedCount} logs supprimés (plus de ${olderThanDays} jours)`);
       
       return deletedCount;
@@ -398,4 +431,5 @@ export class EmailLogService {
   }
 }
 
-export default { ReceiptStorageService, EmailLogService };
+const Services = { ReceiptStorageService, EmailLogService };
+export default Services;
