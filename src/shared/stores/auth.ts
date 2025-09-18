@@ -3,10 +3,22 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase, getCurrentUserProfile } from '@/shared/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
-import type { Database } from '@/shared/types/database';
+// import type { Database } from '@/shared/types/database';
 
 // Types pour le store auth
-type UserProfile = Database['public']['Tables']['profiles']['Row'];
+// Use a relaxed profile type to accept nullable DB fields returned by Supabase
+type UserProfile = {
+  id: string;
+  email: string;
+  full_name?: string | null;
+  role: 'sapeur' | 'chef_equipe' | 'tresorier';
+  team_id?: string | null;
+  phone?: string | null;
+  avatar_url?: string | null;
+  is_active?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
 
 interface AuthState {
   // État
@@ -25,23 +37,29 @@ interface AuthState {
 }
 
 // Helper pour redirection basée sur le rôle
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const redirectByRole = (profile: any | null, event?: string) => {
-  console.log('🔧 REDIRECTION DÉSACTIVÉE POUR TEST', profile, event);
-  return; // SSR check
+const redirectByRole = (profile: UserProfile | null, event?: string) => {
+  // If running on server (SSR) we disable redirects
+  if (typeof window === 'undefined') {
+    console.log('🔧 REDIRECTION DÉSACTIVÉE POUR SSR/TEST', { hasProfile: !!profile, event });
+    return;
+  }
+
+  // Narrow: if no profile present, nothing to do
+  if (!profile) return;
 
   const currentPath = window.location.pathname;
-  
+
+
   // Si utilisateur non actif, rediriger vers page d'attente
-  if (profile?.is_active === false) {
+  if (profile.is_active !== undefined && profile.is_active === false) {
     if (!currentPath.startsWith('/pending')) {
       console.log('⏳ Redirecting inactive user to pending page');
       window.location.replace('/pending');
       return;
     }
   }
-  
-  if (profile?.role === 'tresorier' && profile?.is_active) {
+
+  if (profile.role === 'tresorier' && profile.is_active === true) {
     // ✨ SEULEMENT rediriger lors de la première connexion ou du refresh
     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
       if (!currentPath.startsWith('/admin')) {
@@ -49,7 +67,7 @@ const redirectByRole = (profile: any | null, event?: string) => {
         window.location.replace('/admin');
       }
     }
-  } else if (profile?.is_active === true) {
+  } else if (profile.is_active === true) {
     // Non-trésorier actif : bloquer l'accès admin
     if (currentPath.startsWith('/admin')) {
       console.log('🚫 Redirecting non-treasurer away from admin');
@@ -85,30 +103,17 @@ export const useAuthStore = create<AuthState>()(
           if (session?.user) {
             // Récupérer le profil utilisateur
             const profile = await getCurrentUserProfile();
-
-            // Normaliser le profil pour éviter des nullables inattendus dans le store
-            const normalizeProfile = (p: any) => {
-              if (!p) return null;
-              return {
-                ...p,
-                is_active: Boolean(p.is_active),
-                created_at: p.created_at ?? new Date().toISOString(),
-                updated_at: p.updated_at ?? new Date().toISOString(),
-              } as UserProfile;
-            };
-
-            const normalized = normalizeProfile(profile as any);
-
+            
             set({
               user: session.user,
               session,
-              profile: normalized as unknown as UserProfile,
+              profile,
               isLoading: false,
               isInitialized: true,
             });
 
             // ✨ REDIRECTION SEULEMENT AU PREMIER CHARGEMENT
-            setTimeout(() => redirectByRole(normalized as unknown as UserProfile, 'INITIAL_SESSION'), 100);
+            // DISABLED: setTimeout(() => redirectByRole(profile, 'INITIAL_SESSION'), 100);
             
           } else {
             set({ 
@@ -126,26 +131,16 @@ export const useAuthStore = create<AuthState>()(
 
             if (session?.user) {
               const profile = await getCurrentUserProfile();
-              const normalizeProfile = (p: any) => {
-                if (!p) return null;
-                return {
-                  ...p,
-                  is_active: Boolean(p.is_active),
-                  created_at: p.created_at ?? new Date().toISOString(),
-                  updated_at: p.updated_at ?? new Date().toISOString(),
-                } as UserProfile;
-              };
-              const normalized = normalizeProfile(profile as any);
               set({
                 user: session.user,
                 session,
-                profile: normalized as unknown as UserProfile,
+                profile,
                 isLoading: false,
               });
 
               // ✨ REDIRECTION SEULEMENT LORS DE LA CONNEXION
               if (event === 'SIGNED_IN') {
-                setTimeout(() => redirectByRole(normalized as unknown as UserProfile, 'SIGNED_IN'), 100);
+                // DISABLED: setTimeout(() => redirectByRole(profile, 'SIGNED_IN'), 100);
               }
               
             } else {
@@ -157,8 +152,9 @@ export const useAuthStore = create<AuthState>()(
               });
             }
           });
-        } catch (error) {
-          console.error('Auth initialization error:', error);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error('Auth initialization error:', msg);
           set({ isLoading: false, isInitialized: true });
         }
       },
@@ -181,53 +177,56 @@ export const useAuthStore = create<AuthState>()(
           // La redirection sera gérée par onAuthStateChange
           return {};
         } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
           set({ isLoading: false });
-          const message = error instanceof Error ? error.message : String(error);
-          return { error: message || 'Erreur de connexion' };
+          return { error: msg || 'Erreur de connexion' };
         }
       },
 
       // Inscription
       signUp: async (email: string, password: string, fullName: string) => {
+        set({ isLoading: true, error: null } as unknown as Partial<AuthState>);
         try {
-          set({ isLoading: true });
-
-          const { data, error } = await supabase.auth.signUp({
+          // Create auth user
+          const { data: authData, error: authError } = await supabase.auth.signUp({
             email: email.trim(),
             password,
-            options: {
-              data: {
-                full_name: fullName.trim(),
-              },
-            },
           });
 
-          if (error) {
-            set({ isLoading: false });
-            return { error: error.message };
+          if (authError) {
+            throw new Error(authError.message);
           }
 
-          // Si signup réussi mais confirmation email requise
-          if (data.user && !data.session) {
-            set({ isLoading: false });
-            return { 
-              error: 'Inscription réussie ! Vérifiez votre email pour confirmer votre compte. Votre demande sera ensuite validée par un administrateur.' 
-            };
+          // If user created in auth, insert profile with is_active=false
+          if (authData?.user) {
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .insert({
+                id: authData.user.id,
+                full_name: fullName.trim(),
+                email: email.trim(),
+                is_active: false,
+              });
+
+            if (profileError) {
+              // Try to cleanup the orphan auth user if profile creation failed
+              try {
+                await supabase.auth.admin.deleteUser(authData.user.id);
+              } catch (cleanupError) {
+                console.error('Failed to cleanup orphan user after profile insert failure:', cleanupError);
+              }
+
+              throw new Error(profileError.message);
+            }
           }
 
-          // Si signup réussi avec session immédiate (email confirmé)
-          if (data.user && data.session) {
-            set({ isLoading: false });
-            return { 
-              error: 'Inscription réussie ! Votre demande est en attente de validation par un administrateur.' 
-            };
-          }
-
-          return {};
+          // Let the onAuthStateChange listener handle subsequent state updates
+          return { error: undefined };
         } catch (error: unknown) {
-          set({ isLoading: false });
-          const message = error instanceof Error ? error.message : String(error);
-          return { error: message || 'Erreur d\'inscription' };
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        } finally {
+          set({ isLoading: false } as unknown as Partial<AuthState>);
         }
       },
 
@@ -255,8 +254,9 @@ export const useAuthStore = create<AuthState>()(
             window.location.replace('/');
           }
           
-        } catch (error) {
-          console.error('Signout error:', error);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error('Signout error:', msg);
           set({ isLoading: false });
         }
       },
@@ -268,25 +268,16 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const profile = await getCurrentUserProfile();
-          const normalizeProfile = (p: UserProfile | null) => {
-            if (!p) return null;
-            return {
-              ...p,
-              is_active: Boolean(p.is_active),
-              created_at: p.created_at ?? new Date().toISOString(),
-              updated_at: p.updated_at ?? new Date().toISOString(),
-            } as UserProfile;
-          };
-          const normalized = normalizeProfile(profile as any);
-          set({ profile: normalized as unknown as UserProfile });
+          set({ profile });
           
           // Vérifier si redirection nécessaire après refresh du profil (seulement si changement de rôle)
           const currentProfile = get().profile;
           if (currentProfile?.role !== profile?.role) {
-            setTimeout(() => redirectByRole(profile, 'ROLE_CHANGE'), 100);
+            // DISABLED: setTimeout(() => redirectByRole(profile, 'ROLE_CHANGE'), 100);
           }
-        } catch (error) {
-          console.error('Error refreshing profile:', error);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error('Error refreshing profile:', msg);
         }
       },
     }),
