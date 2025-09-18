@@ -4,33 +4,29 @@ import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/shared/lib/supabase';
 
-// Configuration Stripe (guarded so build doesn't fail when env vars are missing)
-let stripe: Stripe | null = null;
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY, ({ apiVersion: '2025-08-27.basil' } as unknown) as Stripe.StripeConfig);
-}
-
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature') as string;
 
+  // Initialize Stripe lazily at request time to avoid build-time evaluation when env is missing
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!stripeKey || !endpointSecret) {
+    console.error('Stripe configuration missing: STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET');
+    return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
+  }
+
+  const stripe = new Stripe(stripeKey);
+
   let event: Stripe.Event;
 
   try {
-    if (!stripe) {
-      console.error('Stripe not configured: STRIPE_SECRET_KEY missing');
-      return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
-    }
     event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
   } catch (err: unknown) {
-    if (err instanceof Error) {
-      console.error('Webhook signature verification failed:', err.message);
-    } else {
-      console.error('Webhook signature verification failed:', String(err));
-    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('Webhook signature verification failed:', msg);
     return NextResponse.json({ error: 'Webhook Error: Invalid signature' }, { status: 400 });
   }
 
@@ -53,16 +49,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error('Error processing webhook:', error);
-      return NextResponse.json(
-        { error: 'Webhook processing failed', details: error.message },
-        { status: 500 }
-      );
-    }
-    console.error('Error processing webhook:', String(error));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Error processing webhook:', msg);
     return NextResponse.json(
-      { error: 'Webhook processing failed', details: String(error) },
+      { error: 'Webhook processing failed', details: msg },
       { status: 500 }
     );
   }
@@ -138,8 +128,8 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     }
 
   } catch (error: unknown) {
-    if (error instanceof Error) console.error('❌ Error in handleCheckoutSessionCompleted:', error);
-    else console.error('❌ Error in handleCheckoutSessionCompleted:', String(error));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Error in handleCheckoutSessionCompleted:', msg);
   }
 }
 
@@ -175,8 +165,8 @@ async function handleCheckoutSessionExpired(session: Stripe.Checkout.Session) {
       console.log('✅ QR interaction marked as expired:', interactionId);
     }
   } catch (error: unknown) {
-    if (error instanceof Error) console.error('❌ Error in handleCheckoutSessionExpired:', error);
-    else console.error('❌ Error in handleCheckoutSessionExpired:', String(error));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Error in handleCheckoutSessionExpired:', msg);
   }
 }
 
@@ -204,8 +194,8 @@ async function sendRealtimeNotification(payload: {
 
     console.log('📡 Realtime notification sent:', payload.type);
   } catch (error: unknown) {
-    if (error instanceof Error) console.error('❌ Error sending realtime notification:', error);
-    else console.error('❌ Error sending realtime notification:', String(error));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Error sending realtime notification:', msg);
   }
 }
 
@@ -241,7 +231,7 @@ async function sendReceiptEmail(transactionId: string, donatorEmail: string, don
       console.error('❌ Failed to send receipt email:', receiptResponse.statusText);
     }
   } catch (error: unknown) {
-    if (error instanceof Error) console.error('❌ Error sending receipt email:', error);
-    else console.error('❌ Error sending receipt email:', String(error));
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('❌ Error sending receipt email:', msg);
   }
 }
