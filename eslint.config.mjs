@@ -18,6 +18,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Deno-based Supabase functions use remote imports and Deno globals; exclude them from
+      // the Next/TypeScript ESLint pipeline to avoid false positives during local lint/build.
+      "supabase/functions/**",
     ],
   },
 ];

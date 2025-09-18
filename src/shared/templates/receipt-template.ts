@@ -57,25 +57,27 @@ export class ReceiptTemplateService {
       };
     }
 
-    // Normalize and ensure non-nullable fields to match EmailSettings
-    return {
-      smtp_from_name: data.smtp_from_name ?? 'Sapeurs-Pompiers Calendriers 2025',
-      smtp_from_email: data.smtp_from_email ?? 'no-reply@pompiers34800.com',
-      association_name: data.association_name ?? 'Amicale des Sapeurs-Pompiers',
-      association_address: data.association_address ?? 'Adresse à compléter dans les paramètres',
-      association_siren: data.association_siren ?? undefined,
-      association_rna: data.association_rna ?? undefined,
-      legal_text: data.legal_text ?? 'Ce reçu vous est délivré à des fins comptables et justificatives. Conservez-le précieusement.',
-      enable_tracking: Boolean(data.enable_tracking),
-      template_version: String(data.template_version ?? 'v1'),
-    } as EmailSettings;
+    // Normalize nullable DB fields to match EmailSettings (non-nullable strings/booleans)
+    const normalized: EmailSettings = {
+      smtp_from_name: typeof data.smtp_from_name === 'string' && data.smtp_from_name.trim() ? data.smtp_from_name : 'Sapeurs-Pompiers Calendriers 2025',
+      smtp_from_email: typeof data.smtp_from_email === 'string' && data.smtp_from_email.trim() ? data.smtp_from_email : 'no-reply@pompiers34800.com',
+      association_name: typeof data.association_name === 'string' && data.association_name.trim() ? data.association_name : 'Amicale des Sapeurs-Pompiers',
+      association_address: typeof data.association_address === 'string' && data.association_address.trim() ? data.association_address : 'Adresse à compléter dans les paramètres',
+      association_siren: typeof data.association_siren === 'string' && data.association_siren.trim() ? data.association_siren : undefined,
+      association_rna: typeof data.association_rna === 'string' && data.association_rna.trim() ? data.association_rna : undefined,
+      legal_text: typeof data.legal_text === 'string' && data.legal_text.trim() ? data.legal_text : 'Ce reçu vous est délivré à des fins comptables et justificatives. Conservez-le précieusement.',
+      enable_tracking: typeof data.enable_tracking === 'boolean' ? data.enable_tracking : Boolean(data.enable_tracking),
+      template_version: typeof data.template_version === 'string' && data.template_version.trim() ? data.template_version : 'v1'
+    };
+
+    return normalized;
   }
 
   /**
    * Génère l'HTML du reçu avec design émotionnel
    */
   static generateReceiptHTML(data: ReceiptData): string {
-    const paymentMethodLabels: Record<'especes'|'cheque'|'carte'|'virement', string> = {
+    const paymentMethodLabels: Record<string, string> = {
       'especes': '💵 Espèces',
       'cheque': '📝 Chèque',
       'carte': '💳 Carte bancaire',
@@ -475,7 +477,7 @@ export class ReceiptTemplateService {
         
         <div class="detail-row">
           <span class="detail-label">💳 Mode de paiement</span>
-          <span class="detail-value">${paymentMethodLabels[(data.paymentMethod as 'especes'|'cheque'|'carte'|'virement')] || data.paymentMethod}</span>
+          <span class="detail-value">${paymentMethodLabels[data.paymentMethod] || data.paymentMethod}</span>
         </div>
         
         <div class="detail-row">
@@ -542,14 +544,14 @@ export class ReceiptTemplateService {
    * Génère la version texte du reçu
    */
   static generateReceiptText(data: ReceiptData): string {
-    const paymentMethodLabels = {
+    const paymentMethodLabels: Record<string, string> = {
       'especes': 'Espèces',
       'cheque': 'Chèque', 
       'carte': 'Carte bancaire',
       'virement': 'Virement'
     };
 
-  return `
+    return `
 REÇU DE DON - ${data.associationName}
 
 Merci ${data.donatorName} pour votre générosité !
@@ -561,7 +563,7 @@ DÉTAILS DE VOTRE DON
 Donateur      : ${data.donatorName}
 Montant       : ${data.amount}€
 Date          : ${new Date(data.donationDate).toLocaleDateString('fr-FR')}
-Paiement      : ${paymentMethodLabels[(data.paymentMethod as 'especes'|'cheque'|'carte'|'virement')] || data.paymentMethod}
+Paiement      : ${paymentMethodLabels[data.paymentMethod] || data.paymentMethod}
 Calendriers   : ${data.calendarsGiven} calendrier${data.calendarsGiven > 1 ? 's' : ''}
 Sapeur-Pompier: ${data.sapeurName}${data.teamName ? ` (${data.teamName})` : ''}
 N° de reçu    : ${data.receiptNumber}
@@ -594,7 +596,7 @@ Document généré automatiquement le ${new Date().toLocaleDateString('fr-FR')}
 Si vous n'êtes pas le destinataire, veuillez ignorer cet email.
 
 ${data.associationName} - Merci pour votre confiance !
-  `.trim();
+    `.trim();
   }
 }
 
