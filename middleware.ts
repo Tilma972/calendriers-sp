@@ -1,54 +1,35 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { updateSession } from './utils/supabase/middleware';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Crée une réponse qui pourra être modifiée (pour les cookies)
-  const response = NextResponse.next({
-    request: {
-      headers: new Headers(request.headers),
-    },
-  });
+  // 1) Refresh session and mirror cookies into the response if needed
+  const response = await updateSession(request);
 
-  // Create a Supabase server client for middleware with cookie adapter
+  // 2) Create a temporary server client to read the current user (no cookie adapter needed)
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          // When Supabase wants to set a cookie, mirror it onto the NextResponse
-          response.cookies.set({ name, value, ...options });
-        },
-        remove(name: string, options: CookieOptions) {
-          response.cookies.set({ name, value: '', ...options });
-        },
-      },
+        get() { return null },
+        set() {},
+        remove() {},
+      }
     }
   );
 
-  // La ligne la plus importante : rafraîchit la session
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const { data: { user } = { user: null } } = await supabase.auth.getUser();
 
-  // Si l'utilisateur n'est pas connecté ET qu'il n'essaie pas d'accéder
-  // à la page d'authentification, on le redirige.
-  if (!session && pathname !== '/auth') {
-    return NextResponse.redirect(new URL('/auth', request.url));
+  // If user not authenticated and trying to access protected route, redirect to /auth
+  if (!user && !pathname.startsWith('/auth')) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/auth';
+    return NextResponse.redirect(url);
   }
 
-  // Si l'utilisateur est connecté et qu'il va sur la page d'authentification,
-  // on le redirige vers son dashboard.
-  if (session && pathname === '/auth') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
-  // Si tout va bien, on laisse l'utilisateur continuer sa route.
   return response;
 }
 
