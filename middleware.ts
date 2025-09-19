@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
@@ -11,28 +11,21 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Utilisation du client Supabase standard pour le SSR (Server-Side Rendering)
-  const supabase = createClient(
+  // Create a Supabase server client for middleware with cookie adapter
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      global: { headers: { 'Content-Type': 'application/json' } },
-      // We implement a simple cookie adapter so the server-side client can read/set cookies
-      // while running inside Next.js middleware.
-      // Supabase JS doesn't currently accept a typed cookie adapter here, but we only
-      // need get/set/remove that interact with Next's Request/Response cookies.
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
       cookies: {
         get(name: string) {
           return request.cookies.get(name)?.value;
         },
-        set(name: string, value: string, options?: Record<string, unknown>) {
-          // NextResponse.cookies.set expects an object. We cast options to any to avoid strict typing issues here.
-          response.cookies.set({ name, value, ...(options as any) });
+        set(name: string, value: string, options: CookieOptions) {
+          // When Supabase wants to set a cookie, mirror it onto the NextResponse
+          response.cookies.set({ name, value, ...options });
         },
-        remove(name: string, options?: Record<string, unknown>) {
-          response.cookies.set({ name, value: '', ...(options as any) });
+        remove(name: string, options: CookieOptions) {
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
